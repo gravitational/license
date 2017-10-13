@@ -24,7 +24,6 @@ import (
 	"github.com/gravitational/license/constants"
 
 	sigar "github.com/cloudfoundry/gosigar"
-	aws "github.com/gravitational/gravity/lib/cloudprovider/aws/service"
 	"github.com/gravitational/trace"
 )
 
@@ -187,8 +186,8 @@ func (p Payload) FilterInstanceTypes(instanceTypes []string) []string {
 	}
 	supported := []string{}
 	for _, t := range instanceTypes {
-		for _, awsT := range aws.EC2InstanceTypes {
-			if awsT.Name == t && awsT.CPU <= p.MaxCores {
+		for name, cores := range constants.EC2InstanceTypes {
+			if name == t && cores <= p.MaxCores {
 				supported = append(supported, t)
 			}
 		}
