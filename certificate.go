@@ -109,29 +109,19 @@ func parseCertificate(certPEM string) (License, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	// parse the extension
-	var p *Payload
-	for _, ext := range certificate.Extensions {
-		if ext.Id.Equal(constants.LicenseASN1ExtensionID) {
-			p = new(Payload)
-			if err := json.Unmarshal(ext.Value, p); err != nil {
-				return nil, trace.Wrap(err)
-			}
-			break
-		}
-	}
-	if p == nil {
-		return nil, trace.BadParameter("could not find payload extension")
+	payload, err := parsePayloadFromX509(certificate)
+	if err != nil {
+		return nil, trace.Wrap(err)
 	}
 
 	// decrypt encryption key
-	if len(p.EncryptionKey) != 0 {
+	if len(payload.EncryptionKey) != 0 {
 		private, err := x509.ParsePKCS1PrivateKey(privateBytes)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
-		p.EncryptionKey, err = rsa.DecryptOAEP(sha256.New(), rand.Reader,
-			private, p.EncryptionKey, nil)
+		payload.EncryptionKey, err = rsa.DecryptOAEP(sha256.New(), rand.Reader,
+			private, payload.EncryptionKey, nil)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -139,8 +129,36 @@ func parseCertificate(certPEM string) (License, error) {
 
 	return &license{
 		certificate: certificate,
-		payload:     *p,
+		payload:     *payload,
 	}, nil
+}
+
+// ParseLicenseFromX509 parses the provided x509 certificate and returns a license
+func ParseLicenseFromX509(cert *x509.Certificate) (License, error) {
+	payload, err := parsePayloadFromX509(cert)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &license{
+		certificate: cert,
+		payload:     *payload,
+	}, nil
+}
+
+// parsePayloadFromX509 parses the extension with license payload from the
+// provided x509 certificate
+func parsePayloadFromX509(cert *x509.Certificate) (*Payload, error) {
+	for _, ext := range cert.Extensions {
+		if ext.Id.Equal(constants.LicenseASN1ExtensionID) {
+			var p Payload
+			if err := json.Unmarshal(ext.Value, &p); err != nil {
+				return nil, trace.Wrap(err)
+			}
+			return &p, nil
+		}
+	}
+	return nil, trace.NotFound(
+		"certificate does not contain extension with license payload")
 }
 
 // parseCertificatePEM parses the concatenated certificate/private key in PEM format
