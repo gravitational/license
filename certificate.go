@@ -20,6 +20,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
@@ -97,9 +98,14 @@ func newCertificate(data NewLicenseInfo) ([]byte, error) {
 }
 
 // parseCertificate parses the provided license string in PEM format
-func parseCertificate(certPEM string) (License, error) {
+func parseCertificate(pem string) (License, error) {
+	certPEM, keyPEM, err := authority.SplitPEM([]byte(pem))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
 	// parse the certificate and private key
-	certificateBytes, privateBytes, err := parseCertificatePEM(certPEM)
+	certificateBytes, privateBytes, err := parseCertificatePEM(pem)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -130,6 +136,8 @@ func parseCertificate(certPEM string) (License, error) {
 	return &license{
 		certificate: certificate,
 		payload:     *payload,
+		certPEM:     certPEM,
+		keyPEM:      keyPEM,
 	}, nil
 }
 
@@ -186,6 +194,8 @@ func parseCertificatePEM(certPEM string) ([]byte, []byte, error) {
 type license struct {
 	certificate *x509.Certificate
 	payload     Payload
+	certPEM     []byte
+	keyPEM      []byte
 }
 
 // Verify makes sure the certificate is valid.
@@ -213,4 +223,19 @@ func (l *license) Verify(caPEM []byte) error {
 // GetPayload returns payload.
 func (l *license) GetPayload() Payload {
 	return l.payload
+}
+
+// TLSConfigFromLicense builds a client TLS config from the supplied license
+func TLSConfigFromLicense(lic License) (*tls.Config, error) {
+	l, ok := lic.(*license)
+	if !ok {
+		return nil, trace.BadParameter("unsupported license type %T", lic)
+	}
+	tlsCert, err := tls.X509KeyPair(l.certPEM, l.keyPEM)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+	}, nil
 }
