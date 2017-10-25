@@ -66,6 +66,7 @@ func newCertificate(data NewLicenseInfo) ([]byte, error) {
 		Metadata:       data.CustomerMetadata,
 		ProductName:    data.ProductName,
 		ProductVersion: data.ProductVersion,
+		AccountID:      data.AccountID,
 		EncryptionKey:  encryptedKey,
 	}
 	bytes, err := json.Marshal(payload)

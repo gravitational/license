@@ -57,6 +57,8 @@ type Payload struct {
 	Signature string `json:"signature,omitempty"`
 	// Shutdown indicates whether the app should be stopped when the license expires
 	Shutdown bool `json:"shutdown,omitempty"`
+	// AccountID is the id of the account the license was issued for
+	AccountID string `json:"account_id,omitempty"`
 }
 
 // UnmarshalJSON is a custom JSON unmarshaler for payload.
@@ -100,6 +102,7 @@ func (p *Payload) UnmarshalJSON(data []byte) error {
 	p.Email = aux.Email
 	p.Signature = aux.Signature
 	p.Shutdown = aux.Shutdown
+	p.AccountID = aux.AccountID
 	return nil
 }
 
@@ -120,6 +123,7 @@ type unmarshalFormat struct {
 	Email      string `json:"email,omitempty"`
 	Signature  string `json:"signature,omitempty"`
 	Shutdown   bool   `json:"shutdown,omitempty"`
+	AccountID  string `json:"account_id,omitempty"`
 }
 
 // parsePayload attemps to parse the provided license string as a license payload.

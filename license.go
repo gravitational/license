@@ -52,6 +52,8 @@ type NewLicenseInfo struct {
 	ProductName string
 	// ProductVersion is product version the license is for
 	ProductVersion string
+	// AccountID is the id of the account the license is for
+	AccountID string
 	// EncryptionKey is the passphrase for decoding encrypted packages
 	EncryptionKey []byte
 	// TLSKeyPair is the certificate authority to sign the license with
