@@ -226,8 +226,8 @@ func (l *license) GetPayload() Payload {
 	return l.payload
 }
 
-// TLSConfigFromLicense builds a client TLS config from the supplied license
-func TLSConfigFromLicense(lic License) (*tls.Config, error) {
+// TLSCertFromLicense makes a tls certificate from the provided license
+func TLSCertFromLicense(lic License) (*tls.Certificate, error) {
 	l, ok := lic.(*license)
 	if !ok {
 		return nil, trace.BadParameter("unsupported license type %T", lic)
@@ -236,7 +236,16 @@ func TLSConfigFromLicense(lic License) (*tls.Config, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+	return &tlsCert, nil
+}
+
+// TLSConfigFromLicense builds a client TLS config from the supplied license
+func TLSConfigFromLicense(lic License) (*tls.Config, error) {
+	tlsCert, err := TLSCertFromLicense(lic)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 	return &tls.Config{
-		Certificates: []tls.Certificate{tlsCert},
+		Certificates: []tls.Certificate{*tlsCert},
 	}, nil
 }
