@@ -162,10 +162,15 @@ func GenerateCSR(req csr.CertificateRequest, privateKeyPEM []byte) (csrBytes []b
 
 // getSigner returns signer from TLSKeyPair assuming that keypair is a valid X509 certificate authority
 func getSigner(certAuthority *TLSKeyPair, validFor time.Duration) (signer.Signer, error) {
-	cert, err := helpers.ParseCertificatePEM(certAuthority.CertPEM)
+	certs, err := helpers.ParseCertificatesPEM(certAuthority.CertPEM)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+	if len(certs) == 0 {
+		return nil, trace.NotFound("no certificates found in the tls key pair")
+	}
+	// if we have a certificate chain, our cert must come first
+	cert := certs[0]
 
 	key, err := helpers.ParsePrivateKeyPEM(certAuthority.KeyPEM)
 	if err != nil {
