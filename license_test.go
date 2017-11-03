@@ -22,6 +22,7 @@ import (
 
 	"github.com/gravitational/license/authority"
 	"github.com/gravitational/license/constants"
+	"github.com/pborman/uuid"
 
 	"github.com/cloudflare/cfssl/csr"
 	. "gopkg.in/check.v1"
@@ -87,6 +88,24 @@ func (s *LicenseSuite) TestExpiredLicense(c *C) {
 	l, err := ParseLicense(expiredLicense)
 	c.Assert(err, IsNil)
 	c.Assert(l.Verify(nil), NotNil)
+}
+
+func (s *LicenseSuite) TestLicenseFromX509(c *C) {
+	lic, err := NewLicense(NewLicenseInfo{
+		AccountID:  uuid.New(),
+		MaxNodes:   3,
+		ValidFor:   time.Hour,
+		TLSKeyPair: s.ca,
+	})
+	c.Assert(err, IsNil)
+
+	parsed, err := ParseLicense(lic)
+	c.Assert(err, IsNil)
+
+	fromCert, err := ParseLicenseFromX509(parsed.(*license).certificate)
+	c.Assert(err, IsNil)
+
+	c.Assert(parsed.GetPayload(), DeepEquals, fromCert.GetPayload())
 }
 
 const (

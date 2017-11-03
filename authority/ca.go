@@ -21,6 +21,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/pem"
 	"io/ioutil"
 	"time"
 
@@ -240,4 +241,24 @@ func (kr *ExistingKey) SigAlgo() x509.SignatureAlgorithm {
 	default:
 		return x509.SHA1WithRSA
 	}
+}
+
+// SplitPEM splits the provided PEM data that contains concatenated cert and key
+// (in any order) into cert PEM and key PEM respectively. Returns an error if
+// any of them is missing
+func SplitPEM(pemData []byte) (certPEM []byte, keyPEM []byte, err error) {
+	block, rest := pem.Decode(pemData)
+	for block != nil {
+		switch block.Type {
+		case constants.CertificatePEMBlock:
+			certPEM = pem.EncodeToMemory(block)
+		case constants.RSAPrivateKeyPEMBlock:
+			keyPEM = pem.EncodeToMemory(block)
+		}
+		block, rest = pem.Decode(rest)
+	}
+	if len(certPEM) == 0 || len(keyPEM) == 0 {
+		return nil, nil, trace.BadParameter("cert or key PEM data is missing")
+	}
+	return certPEM, keyPEM, nil
 }

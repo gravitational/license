@@ -25,17 +25,21 @@ import (
 
 func TestCA(t *testing.T) { TestingT(t) }
 
-type CASuite struct{}
+type CASuite struct {
+	ca *TLSKeyPair
+}
 
 var _ = Suite(&CASuite{})
 
-func (s *CASuite) TestCertLifecycle(c *C) {
+func (s *CASuite) SetUpSuite(c *C) {
 	ca, err := GenerateSelfSignedCA(csr.CertificateRequest{
 		CN: "cluster.local",
 	})
 	c.Assert(err, IsNil)
-	c.Assert(ca, NotNil)
+	s.ca = ca
+}
 
+func (s *CASuite) TestCertLifecycle(c *C) {
 	keyPair, err := GenerateCertificate(csr.CertificateRequest{
 		CN:    "apiserver",
 		Hosts: []string{"127.0.0.1"},
@@ -45,7 +49,7 @@ func (s *CASuite) TestCertLifecycle(c *C) {
 				OU: "Local Cluster",
 			},
 		},
-	}, ca, nil, 0)
+	}, s.ca, nil, 0)
 
 	c.Assert(err, IsNil)
 	c.Assert(keyPair, NotNil)
@@ -59,11 +63,35 @@ func (s *CASuite) TestCertLifecycle(c *C) {
 				OU: "Local Cluster",
 			},
 		},
-	}, ca, keyPair.KeyPEM, 0)
+	}, s.ca, keyPair.KeyPEM, 0)
 
 	c.Assert(err, IsNil)
 	c.Assert(keyPair2, NotNil)
 
 	c.Assert(string(keyPair.KeyPEM), DeepEquals, string(keyPair2.KeyPEM))
 	c.Assert(string(keyPair.CertPEM), Not(Equals), string(keyPair2.CertPEM))
+}
+
+func (s *CASuite) TestSplitPEM(c *C) {
+	// cert + key
+	combinedPEM := append(s.ca.CertPEM, s.ca.KeyPEM...)
+	certPEM, keyPEM, err := SplitPEM(combinedPEM)
+	c.Assert(err, IsNil)
+	c.Assert(certPEM, DeepEquals, s.ca.CertPEM)
+	c.Assert(keyPEM, DeepEquals, s.ca.KeyPEM)
+
+	// key + cert
+	combinedPEM = append(s.ca.KeyPEM, s.ca.CertPEM...)
+	certPEM, keyPEM, err = SplitPEM(combinedPEM)
+	c.Assert(err, IsNil)
+	c.Assert(certPEM, DeepEquals, s.ca.CertPEM)
+	c.Assert(keyPEM, DeepEquals, s.ca.KeyPEM)
+
+	// cert only
+	_, _, err = SplitPEM(s.ca.CertPEM)
+	c.Assert(err, NotNil)
+
+	// key only
+	_, _, err = SplitPEM(s.ca.KeyPEM)
+	c.Assert(err, NotNil)
 }
