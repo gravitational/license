@@ -24,7 +24,6 @@ import (
 	"github.com/gravitational/license/constants"
 
 	"github.com/cloudflare/cfssl/csr"
-	"github.com/gravitational/trace"
 	"github.com/pborman/uuid"
 	. "gopkg.in/check.v1"
 )
@@ -113,26 +112,3 @@ const (
 	validLicense   = `{"cluster_id": "4fea07ba370f389b", "expiration": "2020-12-31 00:00:00", "maxnodes": "17", "maxcores": "32"}`
 	expiredLicense = `{"cluster_id": "4fea07ba370f389b", "expiration": "2010-12-31 00:00:00"}`
 )
-
-// NewTestLicense generates a new license for use in tests
-func NewTestLicense() (License, error) {
-	ca, err := authority.GenerateSelfSignedCA(csr.CertificateRequest{
-		CN: constants.LicenseKeyPair,
-	})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	lic, err := NewLicense(NewLicenseInfo{
-		MaxNodes:   3,
-		ValidFor:   time.Duration(time.Hour),
-		TLSKeyPair: *ca,
-	})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	parsed, err := ParseLicense(lic)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return parsed, nil
-}

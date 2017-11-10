@@ -21,7 +21,9 @@ import (
 	"time"
 
 	"github.com/gravitational/license/authority"
+	"github.com/gravitational/license/constants"
 
+	"github.com/cloudflare/cfssl/csr"
 	"github.com/gravitational/trace"
 )
 
@@ -119,3 +121,26 @@ const (
 	// this is used by some vendors
 	LicenseTypePayload = "payload"
 )
+
+// NewTestLicense generates a new license for use in tests
+func NewTestLicense() (License, error) {
+	ca, err := authority.GenerateSelfSignedCA(csr.CertificateRequest{
+		CN: constants.LicenseKeyPair,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	lic, err := NewLicense(NewLicenseInfo{
+		MaxNodes:   3,
+		ValidFor:   time.Duration(time.Hour),
+		TLSKeyPair: *ca,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	parsed, err := ParseLicense(lic)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return parsed, nil
+}
