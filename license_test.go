@@ -24,6 +24,7 @@ import (
 	"github.com/gravitational/license/constants"
 
 	"github.com/cloudflare/cfssl/csr"
+	"github.com/pborman/uuid"
 	. "gopkg.in/check.v1"
 )
 
@@ -65,31 +66,23 @@ func (s *LicenseSuite) TestLicense(c *C) {
 	c.Assert(parsed.Verify(s.ca.CertPEM), IsNil)
 
 	// make sure we can retrieve payload data
-	c.Assert(parsed.GetPayload().MaxNodes, Equals, 3)
+	c.Assert(parsed.Payload.MaxNodes, Equals, 3)
 }
 
-func (s *LicenseSuite) TestCustomerLicense(c *C) {
-	// make sure we can parse customer license
-	parsed, err := ParseLicense(validLicense)
+func (s *LicenseSuite) TestLicenseFromX509(c *C) {
+	lic, err := NewLicense(NewLicenseInfo{
+		AccountID:  uuid.New(),
+		MaxNodes:   3,
+		ValidFor:   time.Hour,
+		TLSKeyPair: s.ca,
+	})
 	c.Assert(err, IsNil)
 
-	// make sure it verifies successfully
-	c.Assert(parsed.Verify(nil), IsNil)
-
-	// make sure we can retrieve payload data
-	c.Assert(parsed.GetPayload().ClusterID, Equals, "4fea07ba370f389b")
-	c.Assert(parsed.GetPayload().MaxNodes, Equals, 17)
-	c.Assert(parsed.GetPayload().MaxCores, Equals, 32)
-}
-
-func (s *LicenseSuite) TestExpiredLicense(c *C) {
-	// expired customer license
-	l, err := ParseLicense(expiredLicense)
+	parsed, err := ParseLicense(lic)
 	c.Assert(err, IsNil)
-	c.Assert(l.Verify(nil), NotNil)
-}
 
-const (
-	validLicense   = `{"cluster_id": "4fea07ba370f389b", "expiration": "2020-12-31 00:00:00", "maxnodes": "17", "maxcores": "32"}`
-	expiredLicense = `{"cluster_id": "4fea07ba370f389b", "expiration": "2010-12-31 00:00:00"}`
-)
+	fromCert, err := ParseLicenseFromX509(parsed.Cert)
+	c.Assert(err, IsNil)
+
+	c.Assert(parsed.Payload, DeepEquals, fromCert.Payload)
+}

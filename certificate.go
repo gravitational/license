@@ -20,6 +20,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
@@ -65,6 +66,7 @@ func newCertificate(data NewLicenseInfo) ([]byte, error) {
 		Metadata:       data.CustomerMetadata,
 		ProductName:    data.ProductName,
 		ProductVersion: data.ProductVersion,
+		AccountID:      data.AccountID,
 		EncryptionKey:  encryptedKey,
 	}
 	bytes, err := json.Marshal(payload)
@@ -97,9 +99,14 @@ func newCertificate(data NewLicenseInfo) ([]byte, error) {
 }
 
 // parseCertificate parses the provided license string in PEM format
-func parseCertificate(certPEM string) (License, error) {
+func parseCertificate(pem string) (*License, error) {
+	certPEM, keyPEM, err := authority.SplitPEM([]byte(pem))
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
 	// parse the certificate and private key
-	certificateBytes, privateBytes, err := parseCertificatePEM(certPEM)
+	certificateBytes, privateBytes, err := parseCertificatePEM(pem)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -109,38 +116,58 @@ func parseCertificate(certPEM string) (License, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	// parse the extension
-	var p *Payload
-	for _, ext := range certificate.Extensions {
-		if ext.Id.Equal(constants.LicenseASN1ExtensionID) {
-			p = new(Payload)
-			if err := json.Unmarshal(ext.Value, p); err != nil {
-				return nil, trace.Wrap(err)
-			}
-			break
-		}
-	}
-	if p == nil {
-		return nil, trace.BadParameter("could not find payload extension")
+	payload, err := parsePayloadFromX509(certificate)
+	if err != nil {
+		return nil, trace.Wrap(err)
 	}
 
 	// decrypt encryption key
-	if len(p.EncryptionKey) != 0 {
+	if len(payload.EncryptionKey) != 0 {
 		private, err := x509.ParsePKCS1PrivateKey(privateBytes)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
-		p.EncryptionKey, err = rsa.DecryptOAEP(sha256.New(), rand.Reader,
-			private, p.EncryptionKey, nil)
+		payload.EncryptionKey, err = rsa.DecryptOAEP(sha256.New(), rand.Reader,
+			private, payload.EncryptionKey, nil)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 	}
 
-	return &license{
-		certificate: certificate,
-		payload:     *p,
+	return &License{
+		Cert:    certificate,
+		Payload: *payload,
+		CertPEM: certPEM,
+		KeyPEM:  keyPEM,
 	}, nil
+}
+
+// ParseLicenseFromX509 parses the provided x509 certificate and returns a license
+func ParseLicenseFromX509(cert *x509.Certificate) (*License, error) {
+	payload, err := parsePayloadFromX509(cert)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &License{
+		Cert:    cert,
+		Payload: *payload,
+	}, nil
+}
+
+// parsePayloadFromX509 parses the extension with license payload from the
+// provided x509 certificate
+func parsePayloadFromX509(cert *x509.Certificate) (*Payload, error) {
+	for _, ext := range cert.Extensions {
+		if ext.Id.Equal(constants.LicenseASN1ExtensionID) {
+			var p Payload
+			if err := json.Unmarshal(ext.Value, &p); err != nil {
+				return nil, trace.Wrap(err)
+			}
+			return &p, nil
+		}
+	}
+	return nil, trace.NotFound(
+		"certificate does not contain extension with license payload")
 }
 
 // parseCertificatePEM parses the concatenated certificate/private key in PEM format
@@ -164,14 +191,21 @@ func parseCertificatePEM(certPEM string) ([]byte, []byte, error) {
 	return certificateBytes, privateBytes, nil
 }
 
-// license represents gravity license.
-type license struct {
-	certificate *x509.Certificate
-	payload     Payload
+// License represents Gravitational license
+type License struct {
+	// Cert is the x509 license certificate
+	Cert *x509.Certificate
+	// Payload is the license payload
+	Payload Payload
+	// CertPEM is the certificate part of the license in PEM format
+	CertPEM []byte
+	// KeyPEM is the private key part of the license in PEM Format,
+	// may be empty if the license was parsed from certificate only
+	KeyPEM []byte
 }
 
-// Verify makes sure the certificate is valid.
-func (l *license) Verify(caPEM []byte) error {
+// Verify makes sure the license is valid
+func (l *License) Verify(caPEM []byte) error {
 	roots := x509.NewCertPool()
 
 	// add the provided CA certificate to the roots
@@ -180,7 +214,7 @@ func (l *license) Verify(caPEM []byte) error {
 		return trace.BadParameter("could not find any CA certificates")
 	}
 
-	_, err := l.certificate.Verify(x509.VerifyOptions{Roots: roots})
+	_, err := l.Cert.Verify(x509.VerifyOptions{Roots: roots})
 	if err != nil {
 		certErr, ok := err.(x509.CertificateInvalidError)
 		if ok && certErr.Reason == x509.Expired {
@@ -192,7 +226,23 @@ func (l *license) Verify(caPEM []byte) error {
 	return nil
 }
 
-// GetPayload returns payload.
-func (l *license) GetPayload() Payload {
-	return l.payload
+// TLSCertFromLicense takes the provided license and makes a TLS certificate
+// which is the format used by Go servers
+func TLSCertFromLicense(license License) (*tls.Certificate, error) {
+	tlsCert, err := tls.X509KeyPair(license.CertPEM, license.KeyPEM)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &tlsCert, nil
+}
+
+// TLSConfigFromLicense builds a client TLS config from the supplied license
+func TLSConfigFromLicense(license License) (*tls.Config, error) {
+	tlsCert, err := TLSCertFromLicense(license)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{*tlsCert},
+	}, nil
 }

@@ -20,22 +20,27 @@ import (
 	"testing"
 
 	"github.com/cloudflare/cfssl/csr"
+	"github.com/gravitational/trace"
 	. "gopkg.in/check.v1"
 )
 
 func TestCA(t *testing.T) { TestingT(t) }
 
-type CASuite struct{}
+type CASuite struct {
+	ca *TLSKeyPair
+}
 
 var _ = Suite(&CASuite{})
 
-func (s *CASuite) TestCertLifecycle(c *C) {
+func (s *CASuite) SetUpSuite(c *C) {
 	ca, err := GenerateSelfSignedCA(csr.CertificateRequest{
 		CN: "cluster.local",
 	})
 	c.Assert(err, IsNil)
-	c.Assert(ca, NotNil)
+	s.ca = ca
+}
 
+func (s *CASuite) TestCertLifecycle(c *C) {
 	keyPair, err := GenerateCertificate(csr.CertificateRequest{
 		CN:    "apiserver",
 		Hosts: []string{"127.0.0.1"},
@@ -45,7 +50,7 @@ func (s *CASuite) TestCertLifecycle(c *C) {
 				OU: "Local Cluster",
 			},
 		},
-	}, ca, nil, 0)
+	}, s.ca, nil, 0)
 
 	c.Assert(err, IsNil)
 	c.Assert(keyPair, NotNil)
@@ -59,11 +64,60 @@ func (s *CASuite) TestCertLifecycle(c *C) {
 				OU: "Local Cluster",
 			},
 		},
-	}, ca, keyPair.KeyPEM, 0)
+	}, s.ca, keyPair.KeyPEM, 0)
 
 	c.Assert(err, IsNil)
 	c.Assert(keyPair2, NotNil)
 
 	c.Assert(string(keyPair.KeyPEM), DeepEquals, string(keyPair2.KeyPEM))
 	c.Assert(string(keyPair.CertPEM), Not(Equals), string(keyPair2.CertPEM))
+}
+
+func (s *CASuite) TestSplitPEM(c *C) {
+	testCases := []struct {
+		desc    string
+		input   []byte
+		err     error
+		certPEM []byte
+		keyPEM  []byte
+	}{
+		{
+			desc:    "cert + key",
+			input:   append(s.ca.CertPEM, s.ca.KeyPEM...),
+			err:     nil,
+			certPEM: s.ca.CertPEM,
+			keyPEM:  s.ca.KeyPEM,
+		},
+		{
+			desc:    "key + cert",
+			input:   append(s.ca.KeyPEM, s.ca.CertPEM...),
+			err:     nil,
+			certPEM: s.ca.CertPEM,
+			keyPEM:  s.ca.KeyPEM,
+		},
+		{
+			desc:    "only cert",
+			input:   s.ca.CertPEM,
+			err:     trace.BadParameter(""),
+			certPEM: nil,
+			keyPEM:  nil,
+		},
+		{
+			desc:    "only key",
+			input:   s.ca.KeyPEM,
+			err:     trace.BadParameter(""),
+			certPEM: nil,
+			keyPEM:  nil,
+		},
+	}
+	for _, tc := range testCases {
+		certPEM, keyPEM, err := SplitPEM(tc.input)
+		if tc.err != nil {
+			c.Assert(err, FitsTypeOf, tc.err, Commentf(tc.desc))
+		} else {
+			c.Assert(err, IsNil, Commentf(tc.desc))
+		}
+		c.Assert(certPEM, DeepEquals, tc.certPEM, Commentf(tc.desc))
+		c.Assert(keyPEM, DeepEquals, tc.keyPEM, Commentf(tc.desc))
+	}
 }
