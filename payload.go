@@ -17,8 +17,6 @@ limitations under the License.
 package license
 
 import (
-	"encoding/json"
-	"strconv"
 	"time"
 
 	"github.com/gravitational/license/constants"
@@ -57,96 +55,8 @@ type Payload struct {
 	Signature string `json:"signature,omitempty"`
 	// Shutdown indicates whether the app should be stopped when the license expires
 	Shutdown bool `json:"shutdown,omitempty"`
-	// AccountID is the id of the account the license was issued for
+	// AccountID is the ID of the account the license was issued for
 	AccountID string `json:"account_id,omitempty"`
-}
-
-// UnmarshalJSON is a custom JSON unmarshaler for payload.
-func (p *Payload) UnmarshalJSON(data []byte) error {
-	// first try to unmarshal as a "normal" payload object which is
-	// how we store our own license details
-	var unmarshaled payload
-	err := json.Unmarshal(data, &unmarshaled)
-	if err == nil {
-		*p = Payload(unmarshaled)
-		return nil
-	}
-	// if that failed, use custom unmarshaler with the format defined
-	// below that some of vendors use
-	var aux unmarshalFormat
-	err = json.Unmarshal(data, &aux)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	p.Expiration, err = time.Parse(constants.LicenseTimeFormat, aux.Expiration)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	p.MaxNodes = 0
-	if aux.MaxNodes != "" {
-		p.MaxNodes, err = strconv.Atoi(aux.MaxNodes)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	}
-	p.MaxCores = 0
-	if aux.MaxCores != "" {
-		p.MaxCores, err = strconv.Atoi(aux.MaxCores)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	}
-	p.ClusterID = aux.ClusterID
-	p.Company = aux.Company
-	p.Person = aux.Person
-	p.Email = aux.Email
-	p.Signature = aux.Signature
-	p.Shutdown = aux.Shutdown
-	p.AccountID = aux.AccountID
-	return nil
-}
-
-// payload is used to avoid recursion when unmarshaling
-type payload Payload
-
-// unmarshalFormat specifies how to unmarshal license payload from a JSON string.
-//
-// It's needed because payload serves as a license itself for some customers and they
-// have strict rules of what the string version of license should look like.
-type unmarshalFormat struct {
-	ClusterID  string `json:"cluster_id,omitempty"`
-	Expiration string `json:"expiration,omitempty"`
-	MaxNodes   string `json:"maxnodes,omitempty"`
-	MaxCores   string `json:"maxcores,omitempty"`
-	Company    string `json:"company,omitempty"`
-	Person     string `json:"person,omitempty"`
-	Email      string `json:"email,omitempty"`
-	Signature  string `json:"signature,omitempty"`
-	Shutdown   bool   `json:"shutdown,omitempty"`
-	AccountID  string `json:"account_id,omitempty"`
-}
-
-// parsePayload attemps to parse the provided license string as a license payload.
-func parsePayload(license string) (License, error) {
-	var p Payload
-	err := json.Unmarshal([]byte(license), &p)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &p, nil
-}
-
-// Verify verifies that the expiration time is not in the past.
-func (p Payload) Verify(_ []byte) error {
-	if p.Expiration.Before(time.Now().UTC()) {
-		return trace.BadParameter("the license has expired")
-	}
-	return nil
-}
-
-// GetPayload returns payload.
-func (p Payload) GetPayload() Payload {
-	return p
 }
 
 // CheckCount checks if the license supports the provided number of servers.

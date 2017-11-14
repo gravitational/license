@@ -17,7 +17,6 @@ limitations under the License.
 package license
 
 import (
-	"strings"
 	"time"
 
 	"github.com/gravitational/license/authority"
@@ -26,15 +25,6 @@ import (
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/gravitational/trace"
 )
-
-// License defines a common interface to support both gravity-generated and
-// customer licenses.
-type License interface {
-	// Verify verifies the license is valid.
-	Verify(caPEM []byte) error
-	// GetPayload returns various details encoded into licenses.
-	GetPayload() Payload
-}
 
 // NewLicenseInfo encapsulates fields needed to generate a license
 type NewLicenseInfo struct {
@@ -63,23 +53,22 @@ type NewLicenseInfo struct {
 }
 
 // Check checks the new license request
-func (i NewLicenseInfo) Check() error {
+func (i *NewLicenseInfo) Check() error {
 	if i.MaxNodes < 1 {
-		return trace.BadParameter("maximum number of servers should be 1 or more")
+		return trace.BadParameter("maximum number of servers must be 1 or more")
 	}
 	if time.Now().Add(i.ValidFor).Before(time.Now()) {
 		return trace.BadParameter("expiration date can't be in the past")
 	}
 	if len(i.TLSKeyPair.CertPEM) == 0 {
-		return trace.BadParameter("certificate authority should be provided")
+		return trace.BadParameter("certificate authority must be provided")
 	}
 	return nil
 }
 
-// NewLicense generates a new license according to the provided request.
+// NewLicense generates a new license according to the provided request
 func NewLicense(info NewLicenseInfo) (string, error) {
-	err := info.Check()
-	if err != nil {
+	if err := info.Check(); err != nil {
 		return "", trace.Wrap(err)
 	}
 	certificateBytes, err := newCertificate(info)
@@ -89,48 +78,20 @@ func NewLicense(info NewLicenseInfo) (string, error) {
 	return string(certificateBytes), nil
 }
 
-// ParseLicense tries to detect the type of the provided license and parse it.
-func ParseLicense(license string) (License, error) {
-	if license == "" {
-		return Payload{}, nil
-	}
-	if strings.HasPrefix(license, "{") {
-		return parsePayload(license)
-	}
+// ParseLicense tries to detect the type of the provided license and parse it
+func ParseLicense(license string) (*License, error) {
 	return parseCertificate(license)
 }
 
-// ParseLicenseByType tries to parse the provided license string as a license of
-// the specified type.
-func ParseLicenseByType(license, type_ string) (License, error) {
-	switch type_ {
-	case LicenseTypePayload:
-		return parsePayload(license)
-	case LicenseTypeCertificate:
-		return parseCertificate(license)
-	default:
-		return nil, trace.BadParameter("unknown license type: %v", type_)
-	}
-}
-
-const (
-	// LicenseTypeCertificate means that the license is a x509 certificate with encoded payload,
-	// this is the license normally used by deployments that rely on our own license
-	LicenseTypeCertificate = "certificate"
-	// LicenseTypePayload means that the license is the the payload itself with a signature,
-	// this is used by some vendors
-	LicenseTypePayload = "payload"
-)
-
 // NewTestLicense generates a new license for use in tests
-func NewTestLicense() (License, error) {
+func NewTestLicense() (*License, error) {
 	ca, err := authority.GenerateSelfSignedCA(csr.CertificateRequest{
 		CN: constants.LicenseKeyPair,
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	lic, err := NewLicense(NewLicenseInfo{
+	license, err := NewLicense(NewLicenseInfo{
 		MaxNodes:   3,
 		ValidFor:   time.Duration(time.Hour),
 		TLSKeyPair: *ca,
@@ -138,7 +99,7 @@ func NewTestLicense() (License, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	parsed, err := ParseLicense(lic)
+	parsed, err := ParseLicense(license)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}

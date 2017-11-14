@@ -17,10 +17,6 @@ limitations under the License.
 package license
 
 import (
-	"encoding/json"
-	"strings"
-	"time"
-
 	sigar "github.com/cloudfoundry/gosigar"
 	. "gopkg.in/check.v1"
 )
@@ -28,69 +24,6 @@ import (
 type PayloadSuite struct{}
 
 var _ = Suite(&PayloadSuite{})
-
-func (s *PayloadSuite) TestMarshalUnmarshal(c *C) {
-	p := Payload{
-		ClusterID:  "cluster-123",
-		Expiration: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC),
-		MaxNodes:   3,
-		MaxCores:   8,
-	}
-
-	marshaled, err := json.Marshal(p)
-	c.Assert(err, IsNil)
-
-	// make sure expiration, max nodes and max cores were marshaled as strings
-	c.Assert(strings.Contains(string(marshaled), `"cluster-123"`), Equals, true)
-	c.Assert(strings.Contains(string(marshaled), `"2000-01-01T00:00:00Z"`), Equals, true)
-	c.Assert(strings.Contains(string(marshaled), `3`), Equals, true)
-	c.Assert(strings.Contains(string(marshaled), `8`), Equals, true)
-
-	var unmarshaled Payload
-	err = json.Unmarshal(marshaled, &unmarshaled)
-	c.Assert(err, IsNil)
-
-	// make sure we unmarshaled it correctly
-	c.Assert(unmarshaled.ClusterID, Equals, "cluster-123")
-	c.Assert(unmarshaled.Expiration, Equals, time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC))
-	c.Assert(unmarshaled.MaxNodes, Equals, 3)
-	c.Assert(unmarshaled.MaxCores, Equals, 8)
-}
-
-func (s *PayloadSuite) TestUnmarshalCustomerLicense(c *C) {
-	l := `{"cluster_id": "4fea07ba370f389b", "expiration": "2016-12-31 00:00:00", "maxnodes": "17", "maxcores": "32"}`
-
-	var unmarshaled Payload
-	err := json.Unmarshal([]byte(l), &unmarshaled)
-	c.Assert(err, IsNil)
-
-	// make sure it got unmarshaled correctly
-	c.Assert(unmarshaled.ClusterID, Equals, "4fea07ba370f389b")
-	c.Assert(unmarshaled.Expiration, Equals, time.Date(2016, time.December, 31, 0, 0, 0, 0, time.UTC))
-	c.Assert(unmarshaled.MaxNodes, Equals, 17)
-	c.Assert(unmarshaled.MaxCores, Equals, 32)
-}
-
-func (s *PayloadSuite) TestMarshalUnmarshalOptional(c *C) {
-	p := Payload{
-		ClusterID:  "cluster-123",
-		Expiration: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC),
-	}
-
-	marshaled, err := json.Marshal(p)
-	c.Assert(err, IsNil)
-
-	// no zero values for max nodes and other fields should be present
-	c.Assert(string(marshaled), Equals, `{"cluster_id":"cluster-123","expiration":"2000-01-01T00:00:00Z"}`)
-
-	var unmarshaled Payload
-	err = json.Unmarshal(marshaled, &unmarshaled)
-	c.Assert(err, IsNil)
-
-	// max nodes and max cores should be 0
-	c.Assert(unmarshaled.MaxNodes, Equals, 0)
-	c.Assert(unmarshaled.MaxCores, Equals, 0)
-}
 
 func (s *PayloadSuite) TestCheckCount(c *C) {
 	tcs := []struct {

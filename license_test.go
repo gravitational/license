@@ -66,28 +66,7 @@ func (s *LicenseSuite) TestLicense(c *C) {
 	c.Assert(parsed.Verify(s.ca.CertPEM), IsNil)
 
 	// make sure we can retrieve payload data
-	c.Assert(parsed.GetPayload().MaxNodes, Equals, 3)
-}
-
-func (s *LicenseSuite) TestCustomerLicense(c *C) {
-	// make sure we can parse customer license
-	parsed, err := ParseLicense(validLicense)
-	c.Assert(err, IsNil)
-
-	// make sure it verifies successfully
-	c.Assert(parsed.Verify(nil), IsNil)
-
-	// make sure we can retrieve payload data
-	c.Assert(parsed.GetPayload().ClusterID, Equals, "4fea07ba370f389b")
-	c.Assert(parsed.GetPayload().MaxNodes, Equals, 17)
-	c.Assert(parsed.GetPayload().MaxCores, Equals, 32)
-}
-
-func (s *LicenseSuite) TestExpiredLicense(c *C) {
-	// expired customer license
-	l, err := ParseLicense(expiredLicense)
-	c.Assert(err, IsNil)
-	c.Assert(l.Verify(nil), NotNil)
+	c.Assert(parsed.Payload.MaxNodes, Equals, 3)
 }
 
 func (s *LicenseSuite) TestLicenseFromX509(c *C) {
@@ -102,13 +81,8 @@ func (s *LicenseSuite) TestLicenseFromX509(c *C) {
 	parsed, err := ParseLicense(lic)
 	c.Assert(err, IsNil)
 
-	fromCert, err := ParseLicenseFromX509(parsed.(*license).certificate)
+	fromCert, err := ParseLicenseFromX509(parsed.Cert)
 	c.Assert(err, IsNil)
 
-	c.Assert(parsed.GetPayload(), DeepEquals, fromCert.GetPayload())
+	c.Assert(parsed.Payload, DeepEquals, fromCert.Payload)
 }
-
-const (
-	validLicense   = `{"cluster_id": "4fea07ba370f389b", "expiration": "2020-12-31 00:00:00", "maxnodes": "17", "maxcores": "32"}`
-	expiredLicense = `{"cluster_id": "4fea07ba370f389b", "expiration": "2010-12-31 00:00:00"}`
-)
