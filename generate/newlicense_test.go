@@ -14,29 +14,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package license
+package generate
 
 import (
 	"testing"
 	"time"
 
+	"github.com/gravitational/license"
 	"github.com/gravitational/license/authority"
 	"github.com/gravitational/license/constants"
 
 	"github.com/cloudflare/cfssl/csr"
+	"github.com/gravitational/trace"
 	"github.com/pborman/uuid"
 	. "gopkg.in/check.v1"
 )
 
-func TestLicense(t *testing.T) { TestingT(t) }
+func TestParse(t *testing.T) { TestingT(t) }
 
-type LicenseSuite struct {
+type ParseSuite struct {
 	ca authority.TLSKeyPair
 }
 
-var _ = Suite(&LicenseSuite{})
+var _ = Suite(&ParseSuite{})
 
-func (s *LicenseSuite) SetUpSuite(c *C) {
+func (s *ParseSuite) SetUpSuite(c *C) {
 	// generate certificate authority that will be used in tests
 	ca, err := authority.GenerateSelfSignedCA(csr.CertificateRequest{
 		CN: constants.LicenseKeyPair,
@@ -45,12 +47,12 @@ func (s *LicenseSuite) SetUpSuite(c *C) {
 	s.ca = *ca
 }
 
-func (s *LicenseSuite) TestLicense(c *C) {
+func (s *ParseSuite) TestParseString(c *C) {
 	dur, err := time.ParseDuration("1h")
 	c.Assert(err, IsNil)
 
 	// generate a new license
-	license, err := NewLicense(NewLicenseInfo{
+	lic, err := NewLicense(NewLicenseInfo{
 		MaxNodes:   3,
 		ValidFor:   dur,
 		StopApp:    false,
@@ -59,7 +61,7 @@ func (s *LicenseSuite) TestLicense(c *C) {
 	c.Assert(err, IsNil)
 
 	// make sure we can parse it
-	parsed, err := ParseLicense(license)
+	parsed, err := license.ParseString(lic)
 	c.Assert(err, IsNil)
 
 	// make sure it verifies successfully
@@ -69,7 +71,7 @@ func (s *LicenseSuite) TestLicense(c *C) {
 	c.Assert(parsed.Payload.MaxNodes, Equals, 3)
 }
 
-func (s *LicenseSuite) TestLicenseFromX509(c *C) {
+func (s *ParseSuite) TestParseX509(c *C) {
 	lic, err := NewLicense(NewLicenseInfo{
 		AccountID:  uuid.New(),
 		MaxNodes:   3,
@@ -78,11 +80,60 @@ func (s *LicenseSuite) TestLicenseFromX509(c *C) {
 	})
 	c.Assert(err, IsNil)
 
-	parsed, err := ParseLicense(lic)
+	parsed, err := license.ParseString(lic)
 	c.Assert(err, IsNil)
 
-	fromCert, err := ParseLicenseFromX509(parsed.Cert)
+	fromCert, err := license.ParseX509(parsed.Cert)
 	c.Assert(err, IsNil)
 
 	c.Assert(parsed.Payload, DeepEquals, fromCert.Payload)
+}
+
+func (s *ParseSuite) TestSplitPEM(c *C) {
+	testCases := []struct {
+		desc    string
+		input   []byte
+		err     error
+		certPEM []byte
+		keyPEM  []byte
+	}{
+		{
+			desc:    "cert + key",
+			input:   append(s.ca.CertPEM, s.ca.KeyPEM...),
+			err:     nil,
+			certPEM: s.ca.CertPEM,
+			keyPEM:  s.ca.KeyPEM,
+		},
+		{
+			desc:    "key + cert",
+			input:   append(s.ca.KeyPEM, s.ca.CertPEM...),
+			err:     nil,
+			certPEM: s.ca.CertPEM,
+			keyPEM:  s.ca.KeyPEM,
+		},
+		{
+			desc:    "only cert",
+			input:   s.ca.CertPEM,
+			err:     trace.BadParameter(""),
+			certPEM: nil,
+			keyPEM:  nil,
+		},
+		{
+			desc:    "only key",
+			input:   s.ca.KeyPEM,
+			err:     trace.BadParameter(""),
+			certPEM: nil,
+			keyPEM:  nil,
+		},
+	}
+	for _, tc := range testCases {
+		certPEM, keyPEM, err := license.SplitPEM(tc.input)
+		if tc.err != nil {
+			c.Assert(err, FitsTypeOf, tc.err, Commentf(tc.desc))
+		} else {
+			c.Assert(err, IsNil, Commentf(tc.desc))
+		}
+		c.Assert(certPEM, DeepEquals, tc.certPEM, Commentf(tc.desc))
+		c.Assert(keyPEM, DeepEquals, tc.keyPEM, Commentf(tc.desc))
+	}
 }

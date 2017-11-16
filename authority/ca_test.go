@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/cloudflare/cfssl/csr"
-	"github.com/gravitational/trace"
 	. "gopkg.in/check.v1"
 )
 
@@ -71,53 +70,4 @@ func (s *CASuite) TestCertLifecycle(c *C) {
 
 	c.Assert(string(keyPair.KeyPEM), DeepEquals, string(keyPair2.KeyPEM))
 	c.Assert(string(keyPair.CertPEM), Not(Equals), string(keyPair2.CertPEM))
-}
-
-func (s *CASuite) TestSplitPEM(c *C) {
-	testCases := []struct {
-		desc    string
-		input   []byte
-		err     error
-		certPEM []byte
-		keyPEM  []byte
-	}{
-		{
-			desc:    "cert + key",
-			input:   append(s.ca.CertPEM, s.ca.KeyPEM...),
-			err:     nil,
-			certPEM: s.ca.CertPEM,
-			keyPEM:  s.ca.KeyPEM,
-		},
-		{
-			desc:    "key + cert",
-			input:   append(s.ca.KeyPEM, s.ca.CertPEM...),
-			err:     nil,
-			certPEM: s.ca.CertPEM,
-			keyPEM:  s.ca.KeyPEM,
-		},
-		{
-			desc:    "only cert",
-			input:   s.ca.CertPEM,
-			err:     trace.BadParameter(""),
-			certPEM: nil,
-			keyPEM:  nil,
-		},
-		{
-			desc:    "only key",
-			input:   s.ca.KeyPEM,
-			err:     trace.BadParameter(""),
-			certPEM: nil,
-			keyPEM:  nil,
-		},
-	}
-	for _, tc := range testCases {
-		certPEM, keyPEM, err := SplitPEM(tc.input)
-		if tc.err != nil {
-			c.Assert(err, FitsTypeOf, tc.err, Commentf(tc.desc))
-		} else {
-			c.Assert(err, IsNil, Commentf(tc.desc))
-		}
-		c.Assert(certPEM, DeepEquals, tc.certPEM, Commentf(tc.desc))
-		c.Assert(keyPEM, DeepEquals, tc.keyPEM, Commentf(tc.desc))
-	}
 }

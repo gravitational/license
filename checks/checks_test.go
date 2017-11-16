@@ -14,18 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package license
+package checks
 
 import (
+	"testing"
+
+	"github.com/gravitational/license"
+
 	sigar "github.com/cloudfoundry/gosigar"
 	. "gopkg.in/check.v1"
 )
 
-type PayloadSuite struct{}
+func TestChecks(t *testing.T) { TestingT(t) }
 
-var _ = Suite(&PayloadSuite{})
+type ChecksSuite struct{}
 
-func (s *PayloadSuite) TestCheckCount(c *C) {
+var _ = Suite(&ChecksSuite{})
+
+func (s *ChecksSuite) TestCheckCount(c *C) {
 	tcs := []struct {
 		name     string
 		maxNodes int
@@ -58,12 +64,12 @@ func (s *PayloadSuite) TestCheckCount(c *C) {
 		},
 	}
 	for _, tc := range tcs {
-		err := Payload{MaxNodes: tc.maxNodes}.CheckCount(tc.count)
+		err := CheckCount(license.Payload{MaxNodes: tc.maxNodes}, tc.count)
 		c.Assert(err == nil, Equals, tc.ok, Commentf("%v failed", tc.name))
 	}
 }
 
-func (s *PayloadSuite) TestCheckCPU(c *C) {
+func (s *ChecksSuite) TestCheckCPU(c *C) {
 	tcs := []struct {
 		name     string
 		maxCores int
@@ -100,12 +106,12 @@ func (s *PayloadSuite) TestCheckCPU(c *C) {
 		for i := 0; i < tc.count; i++ {
 			cpus.List = append(cpus.List, sigar.Cpu{})
 		}
-		err := Payload{MaxCores: tc.maxCores}.CheckCPU(cpus)
+		err := CheckCPU(license.Payload{MaxCores: tc.maxCores}, cpus)
 		c.Assert(err == nil, Equals, tc.ok, Commentf("%v failed", tc.name))
 	}
 }
 
-func (s *PayloadSuite) TestCheckInstanceTypes(c *C) {
+func (s *ChecksSuite) TestCheckInstanceTypes(c *C) {
 	tcs := []struct {
 		name          string
 		maxCores      int
@@ -138,12 +144,12 @@ func (s *PayloadSuite) TestCheckInstanceTypes(c *C) {
 		},
 	}
 	for _, tc := range tcs {
-		err := Payload{MaxCores: tc.maxCores}.CheckInstanceTypes(tc.instanceTypes)
+		err := CheckInstanceTypes(license.Payload{MaxCores: tc.maxCores}, tc.instanceTypes)
 		c.Assert(err == nil, Equals, tc.ok, Commentf("%v failed", tc.name))
 	}
 }
 
-func (s *PayloadSuite) TestFilterInstanceTypes(c *C) {
+func (s *ChecksSuite) TestFilterInstanceTypes(c *C) {
 	tcs := []struct {
 		name          string
 		maxCores      int
@@ -176,7 +182,7 @@ func (s *PayloadSuite) TestFilterInstanceTypes(c *C) {
 		},
 	}
 	for _, tc := range tcs {
-		filtered := Payload{MaxCores: tc.maxCores}.FilterInstanceTypes(tc.instanceTypes)
+		filtered := FilterInstanceTypes(license.Payload{MaxCores: tc.maxCores}, tc.instanceTypes)
 		c.Assert(filtered, DeepEquals, tc.expected, Commentf("%v failed", tc.name))
 	}
 }
