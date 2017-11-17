@@ -17,91 +17,75 @@ limitations under the License.
 package license
 
 import (
+	"crypto/x509"
 	"time"
 
-	"github.com/gravitational/license/authority"
-	"github.com/gravitational/license/constants"
-
-	"github.com/cloudflare/cfssl/csr"
 	"github.com/gravitational/trace"
 )
 
-// NewLicenseInfo encapsulates fields needed to generate a license
-type NewLicenseInfo struct {
-	// MaxNodes is maximum number of nodes the license allows
-	MaxNodes int
-	// ValidFor is validity period for the license
-	ValidFor time.Duration
-	// StopApp indicates whether the app should be stopped when the license expires
-	StopApp bool
-	// CustomerName is the name of the customer the license is generated for
-	CustomerName string
-	// CustomerName is the email of the customer the license is generated for
-	CustomerEmail string
-	// CustomerMetadata is arbitrary metadata to add to the license
-	CustomerMetadata string
-	// ProductName is the name of the product the license is for
-	ProductName string
-	// ProductVersion is product version the license is for
-	ProductVersion string
-	// AccountID is the id of the account the license is for
-	AccountID string
-	// EncryptionKey is the passphrase for decoding encrypted packages
-	EncryptionKey []byte
-	// TLSKeyPair is the certificate authority to sign the license with
-	TLSKeyPair authority.TLSKeyPair
+// License represents Gravitational license
+type License struct {
+	// Cert is the x509 license certificate
+	Cert *x509.Certificate
+	// Payload is the license payload
+	Payload Payload
+	// CertPEM is the certificate part of the license in PEM format
+	CertPEM []byte
+	// KeyPEM is the private key part of the license in PEM Format,
+	// may be empty if the license was parsed from certificate only
+	KeyPEM []byte
 }
 
-// Check checks the new license request
-func (i *NewLicenseInfo) Check() error {
-	if i.MaxNodes < 1 {
-		return trace.BadParameter("maximum number of servers must be 1 or more")
+// Verify makes sure the license is valid
+func (l *License) Verify(caPEM []byte) error {
+	roots := x509.NewCertPool()
+
+	// add the provided CA certificate to the roots
+	ok := roots.AppendCertsFromPEM(caPEM)
+	if !ok {
+		return trace.BadParameter("could not find any CA certificates")
 	}
-	if time.Now().Add(i.ValidFor).Before(time.Now()) {
-		return trace.BadParameter("expiration date can't be in the past")
+
+	_, err := l.Cert.Verify(x509.VerifyOptions{Roots: roots})
+	if err != nil {
+		certErr, ok := err.(x509.CertificateInvalidError)
+		if ok && certErr.Reason == x509.Expired {
+			return trace.BadParameter("the license has expired")
+		}
+		return trace.Wrap(err, "failed to verify the license")
 	}
-	if len(i.TLSKeyPair.CertPEM) == 0 {
-		return trace.BadParameter("certificate authority must be provided")
-	}
+
 	return nil
 }
 
-// NewLicense generates a new license according to the provided request
-func NewLicense(info NewLicenseInfo) (string, error) {
-	if err := info.Check(); err != nil {
-		return "", trace.Wrap(err)
-	}
-	certificateBytes, err := newCertificate(info)
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-	return string(certificateBytes), nil
-}
-
-// ParseLicense tries to detect the type of the provided license and parse it
-func ParseLicense(license string) (*License, error) {
-	return parseCertificate(license)
-}
-
-// NewTestLicense generates a new license for use in tests
-func NewTestLicense() (*License, error) {
-	ca, err := authority.GenerateSelfSignedCA(csr.CertificateRequest{
-		CN: constants.LicenseKeyPair,
-	})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	license, err := NewLicense(NewLicenseInfo{
-		MaxNodes:   3,
-		ValidFor:   time.Duration(time.Hour),
-		TLSKeyPair: *ca,
-	})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	parsed, err := ParseLicense(license)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return parsed, nil
+// Payload is custom information that gets encoded into licenses
+type Payload struct {
+	// ClusterID is vendor-specific cluster ID
+	ClusterID string `json:"cluster_id,omitempty"`
+	// Expiration is expiration time for the license
+	Expiration time.Time `json:"expiration,omitempty"`
+	// MaxNodes is maximum number of nodes the license allows
+	MaxNodes int `json:"max_nodes,omitempty"`
+	// MaxCores is maximum number of CPUs per node the license allows
+	MaxCores int `json:"max_cores,omitempty"`
+	// Company is the company name the license is generated for
+	Company string `json:"company,omitempty"`
+	// Person is the name of the person the license is generated for
+	Person string `json:"person,omitempty"`
+	// Email is the email of the person the license is generated for
+	Email string `json:"email,omitempty"`
+	// Metadata is an arbitrary customer metadata
+	Metadata string `json:"metadata,omitempty"`
+	// ProductName is the name of the product the license is for
+	ProductName string `json:"product_name,omitempty"`
+	// ProductVersion is the product version
+	ProductVersion string `json:"product_version,omitempty"`
+	// EncryptionKey is the passphrase for decoding encrypted packages
+	EncryptionKey []byte `json:"encryption_key,omitempty"`
+	// Signature is vendor-specific signature
+	Signature string `json:"signature,omitempty"`
+	// Shutdown indicates whether the app should be stopped when the license expires
+	Shutdown bool `json:"shutdown,omitempty"`
+	// AccountID is the ID of the account the license was issued for
+	AccountID string `json:"account_id,omitempty"`
 }
