@@ -17,6 +17,8 @@ limitations under the License.
 package generate
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"testing"
 	"time"
 
@@ -26,14 +28,14 @@ import (
 
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/gravitational/trace"
-	"github.com/pborman/uuid"
 	. "gopkg.in/check.v1"
 )
 
 func TestParse(t *testing.T) { TestingT(t) }
 
 type ParseSuite struct {
-	ca authority.TLSKeyPair
+	ca         authority.TLSKeyPair
+	privateKey *rsa.PrivateKey
 }
 
 var _ = Suite(&ParseSuite{})
@@ -44,7 +46,12 @@ func (s *ParseSuite) SetUpSuite(c *C) {
 		CN: constants.LicenseKeyPair,
 	})
 	c.Assert(err, IsNil)
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, constants.LicenseKeyBits)
+	c.Assert(err, IsNil)
+
 	s.ca = *ca
+	s.privateKey = privateKey
 }
 
 func (s *ParseSuite) TestParseString(c *C) {
@@ -53,40 +60,33 @@ func (s *ParseSuite) TestParseString(c *C) {
 
 	// generate a new license
 	lic, err := NewLicense(NewLicenseInfo{
-		MaxNodes:   3,
 		ValidFor:   dur,
-		StopApp:    false,
 		TLSKeyPair: s.ca,
+		PrivateKey: s.privateKey,
 	})
 	c.Assert(err, IsNil)
 
 	// make sure we can parse it
-	parsed, err := license.ParseString(lic)
+	parsed, err := license.ParseLicensePEM([]byte(lic))
 	c.Assert(err, IsNil)
 
 	// make sure it verifies successfully
 	c.Assert(parsed.Verify(s.ca.CertPEM), IsNil)
-
-	// make sure we can retrieve payload data
-	c.Assert(parsed.Payload.MaxNodes, Equals, 3)
 }
 
 func (s *ParseSuite) TestParseX509(c *C) {
 	lic, err := NewLicense(NewLicenseInfo{
-		AccountID:  uuid.New(),
-		MaxNodes:   3,
 		ValidFor:   time.Hour,
 		TLSKeyPair: s.ca,
+		PrivateKey: s.privateKey,
 	})
 	c.Assert(err, IsNil)
 
-	parsed, err := license.ParseString(lic)
+	parsed, err := license.ParseLicensePEM([]byte(lic))
 	c.Assert(err, IsNil)
 
-	fromCert, err := license.ParseX509(parsed.Cert)
+	_, err = license.ParseX509(parsed.Cert)
 	c.Assert(err, IsNil)
-
-	c.Assert(parsed.Payload, DeepEquals, fromCert.Payload)
 }
 
 func (s *ParseSuite) TestSplitPEM(c *C) {
