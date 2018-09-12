@@ -17,16 +17,10 @@ limitations under the License.
 package generate
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
-	"time"
 
-	"github.com/gravitational/license"
 	"github.com/gravitational/license/authority"
 	"github.com/gravitational/license/constants"
 
@@ -37,47 +31,10 @@ import (
 )
 
 func newCertificate(data NewLicenseInfo) ([]byte, error) {
-	private, err := rsa.GenerateKey(rand.Reader, constants.LicenseKeyBits)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	privatePEM := pem.EncodeToMemory(&pem.Block{
-		Type:  constants.RSAPrivateKeyPEMBlock,
-		Bytes: x509.MarshalPKCS1PrivateKey(private),
-	})
-
-	// encrypt encryption key
-	var encryptedKey []byte
-	if len(data.EncryptionKey) != 0 {
-		encryptedKey, err = rsa.EncryptOAEP(sha256.New(), rand.Reader,
-			private.Public().(*rsa.PublicKey), data.EncryptionKey, nil)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-	}
-
-	payload := license.Payload{
-		MaxNodes:       data.MaxNodes,
-		Expiration:     time.Now().UTC().Add(data.ValidFor),
-		Shutdown:       data.StopApp,
-		Person:         data.CustomerName,
-		Email:          data.CustomerEmail,
-		Metadata:       data.CustomerMetadata,
-		ProductName:    data.ProductName,
-		ProductVersion: data.ProductVersion,
-		AccountID:      data.AccountID,
-		EncryptionKey:  encryptedKey,
-	}
-	bytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
 	// make an extension to encode into certificate
 	extensions := []signer.Extension{{
 		ID:    config.OID(constants.LicenseASN1ExtensionID),
-		Value: hex.EncodeToString(bytes),
+		Value: hex.EncodeToString(data.Payload),
 	}}
 
 	req := csr.CertificateRequest{
@@ -87,6 +44,11 @@ func newCertificate(data NewLicenseInfo) ([]byte, error) {
 			O: constants.LicenseOrg,
 		}},
 	}
+
+	privatePEM := pem.EncodeToMemory(&pem.Block{
+		Type:  constants.RSAPrivateKeyPEMBlock,
+		Bytes: x509.MarshalPKCS1PrivateKey(data.PrivateKey),
+	})
 
 	// generate certificate signed by the provided certificate authority
 	tlsKeyPair, err := authority.GenerateCertificateWithExtensions(
