@@ -28,68 +28,69 @@ import (
 
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/gravitational/trace"
-	. "gopkg.in/check.v1"
+	"github.com/stretchr/testify/require"
 )
 
-func TestParse(t *testing.T) { TestingT(t) }
-
-type ParseSuite struct {
+type pack struct {
 	ca         authority.TLSKeyPair
 	privateKey *rsa.PrivateKey
 }
 
-var _ = Suite(&ParseSuite{})
-
-func (s *ParseSuite) SetUpSuite(c *C) {
+func makePack(t *testing.T) pack {
 	// generate certificate authority that will be used in tests
 	ca, err := authority.GenerateSelfSignedCA(csr.CertificateRequest{
 		CN: constants.LicenseKeyPair,
 	})
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, constants.LicenseKeyBits)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
-	s.ca = *ca
-	s.privateKey = privateKey
+	return pack{ca: *ca, privateKey: privateKey}
 }
 
-func (s *ParseSuite) TestParseString(c *C) {
+func TestParseString(t *testing.T) {
+	pack := makePack(t)
+
 	dur, err := time.ParseDuration("1h")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	// generate a new license
 	lic, err := NewLicense(NewLicenseInfo{
 		ValidFor:   dur,
-		TLSKeyPair: s.ca,
-		PrivateKey: s.privateKey,
+		TLSKeyPair: pack.ca,
+		PrivateKey: pack.privateKey,
 	})
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	// make sure we can parse it
 	parsed, err := license.ParseLicensePEM([]byte(lic))
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	// make sure it verifies successfully
-	c.Assert(parsed.Verify(s.ca.CertPEM), IsNil)
+	require.NoError(t, parsed.Verify(pack.ca.CertPEM))
 }
 
-func (s *ParseSuite) TestParseX509(c *C) {
+func TestParseX509(t *testing.T) {
+	pack := makePack(t)
+
 	lic, err := NewLicense(NewLicenseInfo{
 		ValidFor:   time.Hour,
-		TLSKeyPair: s.ca,
-		PrivateKey: s.privateKey,
+		TLSKeyPair: pack.ca,
+		PrivateKey: pack.privateKey,
 	})
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	parsed, err := license.ParseLicensePEM([]byte(lic))
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	_, err = license.ParseX509(parsed.Cert)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 }
 
-func (s *ParseSuite) TestSplitPEM(c *C) {
+func TestSplitPEM(t *testing.T) {
+	pack := makePack(t)
+
 	testCases := []struct {
 		desc    string
 		input   []byte
@@ -99,41 +100,43 @@ func (s *ParseSuite) TestSplitPEM(c *C) {
 	}{
 		{
 			desc:    "cert + key",
-			input:   append(s.ca.CertPEM, s.ca.KeyPEM...),
+			input:   append(pack.ca.CertPEM, pack.ca.KeyPEM...),
 			err:     nil,
-			certPEM: s.ca.CertPEM,
-			keyPEM:  s.ca.KeyPEM,
+			certPEM: pack.ca.CertPEM,
+			keyPEM:  pack.ca.KeyPEM,
 		},
 		{
 			desc:    "key + cert",
-			input:   append(s.ca.KeyPEM, s.ca.CertPEM...),
+			input:   append(pack.ca.KeyPEM, pack.ca.CertPEM...),
 			err:     nil,
-			certPEM: s.ca.CertPEM,
-			keyPEM:  s.ca.KeyPEM,
+			certPEM: pack.ca.CertPEM,
+			keyPEM:  pack.ca.KeyPEM,
 		},
 		{
 			desc:    "only cert",
-			input:   s.ca.CertPEM,
+			input:   pack.ca.CertPEM,
 			err:     trace.BadParameter(""),
 			certPEM: nil,
 			keyPEM:  nil,
 		},
 		{
 			desc:    "only key",
-			input:   s.ca.KeyPEM,
+			input:   pack.ca.KeyPEM,
 			err:     trace.BadParameter(""),
 			certPEM: nil,
 			keyPEM:  nil,
 		},
 	}
 	for _, tc := range testCases {
-		certPEM, keyPEM, err := license.SplitPEM(tc.input)
-		if tc.err != nil {
-			c.Assert(err, FitsTypeOf, tc.err, Commentf(tc.desc))
-		} else {
-			c.Assert(err, IsNil, Commentf(tc.desc))
-		}
-		c.Assert(certPEM, DeepEquals, tc.certPEM, Commentf(tc.desc))
-		c.Assert(keyPEM, DeepEquals, tc.keyPEM, Commentf(tc.desc))
+		t.Run(tc.desc, func(t *testing.T) {
+			certPEM, keyPEM, err := license.SplitPEM(tc.input)
+			if tc.err != nil {
+				require.IsType(t, tc.err, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.certPEM, certPEM)
+			require.Equal(t, tc.keyPEM, keyPEM)
+		})
 	}
 }
