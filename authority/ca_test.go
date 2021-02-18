@@ -20,26 +20,24 @@ import (
 	"testing"
 
 	"github.com/cloudflare/cfssl/csr"
-	. "gopkg.in/check.v1"
+	"github.com/stretchr/testify/require"
 )
 
-func TestCA(t *testing.T) { TestingT(t) }
-
-type CASuite struct {
+type pack struct {
 	ca *TLSKeyPair
 }
 
-var _ = Suite(&CASuite{})
-
-func (s *CASuite) SetUpSuite(c *C) {
+func makePack(t *testing.T) pack {
 	ca, err := GenerateSelfSignedCA(csr.CertificateRequest{
 		CN: "cluster.local",
 	})
-	c.Assert(err, IsNil)
-	s.ca = ca
+	require.NoError(t, err)
+	return pack{ca: ca}
 }
 
-func (s *CASuite) TestCertLifecycle(c *C) {
+func TestCertLifecycle(t *testing.T) {
+	pack := makePack(t)
+
 	keyPair, err := GenerateCertificate(csr.CertificateRequest{
 		CN:    "apiserver",
 		Hosts: []string{"127.0.0.1"},
@@ -49,10 +47,9 @@ func (s *CASuite) TestCertLifecycle(c *C) {
 				OU: "Local Cluster",
 			},
 		},
-	}, s.ca, nil, 0)
-
-	c.Assert(err, IsNil)
-	c.Assert(keyPair, NotNil)
+	}, pack.ca, nil, 0)
+	require.NoError(t, err)
+	require.NotNil(t, keyPair)
 
 	keyPair2, err := GenerateCertificate(csr.CertificateRequest{
 		CN:    "apiserver",
@@ -63,11 +60,10 @@ func (s *CASuite) TestCertLifecycle(c *C) {
 				OU: "Local Cluster",
 			},
 		},
-	}, s.ca, keyPair.KeyPEM, 0)
+	}, pack.ca, keyPair.KeyPEM, 0)
+	require.NoError(t, err)
+	require.NotNil(t, keyPair2)
 
-	c.Assert(err, IsNil)
-	c.Assert(keyPair2, NotNil)
-
-	c.Assert(string(keyPair.KeyPEM), DeepEquals, string(keyPair2.KeyPEM))
-	c.Assert(string(keyPair.CertPEM), Not(Equals), string(keyPair2.CertPEM))
+	require.Equal(t, keyPair.KeyPEM, keyPair2.KeyPEM)
+	require.NotEqual(t, keyPair.CertPEM, keyPair2.CertPEM)
 }
