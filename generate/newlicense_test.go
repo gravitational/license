@@ -131,7 +131,6 @@ func TestSplitPEM(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			certPEM, keyPEM, err := license.SplitPEM(tc.input)
 			if tc.err != nil {
-				require.Error(t, err)
 				require.IsType(t, tc.err, err)
 			} else {
 				require.NoError(t, err)
