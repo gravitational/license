@@ -19,6 +19,7 @@ package license
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 
 	"github.com/gravitational/license/constants"
@@ -40,32 +41,33 @@ func ParseLicensePEM(pem []byte) (*License, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	rawPayload, err := getRawPayloadFromX509(certificate)
+	rawPayload, anonKey, err := parseExtensionsFromX509(certificate)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	license := License{
-		Cert:       certificate,
-		CertPEM:    certPEM,
-		KeyPEM:     keyPEM,
-		RawPayload: rawPayload,
+		Cert:             certificate,
+		CertPEM:          certPEM,
+		KeyPEM:           keyPEM,
+		RawPayload:       rawPayload,
+		AnonymizationKey: anonKey,
 	}
 
 	return &license, nil
-
 }
 
 // ParseX509 parses the license from the provided x509 certificate
 func ParseX509(cert *x509.Certificate) (*License, error) {
-	rawPayload, err := getRawPayloadFromX509(cert)
+	rawPayload, anonKey, err := parseExtensionsFromX509(cert)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	license := License{
-		Cert:       cert,
-		RawPayload: rawPayload,
+		Cert:             cert,
+		RawPayload:       rawPayload,
+		AnonymizationKey: anonKey,
 	}
 
 	return &license, nil
@@ -92,16 +94,28 @@ func MakeTLSConfig(license License) (*tls.Config, error) {
 	}, nil
 }
 
-// getRawPayloadFromX509 returns the payload in the extension of the
-// provided x509 certificate
-func getRawPayloadFromX509(cert *x509.Certificate) ([]byte, error) {
+// getRawPayloadFromX509 returns the payload and the anonymization key
+// from extensions of the provided x509 certificate.
+func parseExtensionsFromX509(cert *x509.Certificate) ([]byte, string, error) {
+	var (
+		payload []byte
+		anonKey string
+	)
+
 	for _, ext := range cert.Extensions {
 		if ext.Id.Equal(constants.LicenseASN1ExtensionID) {
-			return ext.Value, nil
+			payload = ext.Value
+		} else if ext.Id.Equal(constants.AnonymizationKeyASN1ExtensionID) {
+			anonKey = hex.EncodeToString(ext.Value)
 		}
 	}
-	return nil, trace.NotFound(
-		"certificate does not contain extension with license payload")
+
+	if len(payload) == 0 {
+		return nil, "", trace.NotFound(
+			"certificate does not contain extension with license payload")
+	}
+
+	return payload, anonKey, nil
 }
 
 // parseCertificatePEM parses the concatenated certificate/private key in PEM format

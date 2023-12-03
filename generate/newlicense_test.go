@@ -78,14 +78,39 @@ func TestParseX509(t *testing.T) {
 		ValidFor:   time.Hour,
 		TLSKeyPair: pack.ca,
 		PrivateKey: pack.privateKey,
+		Payload:    []byte("payload"),
 	})
 	require.NoError(t, err)
 
 	parsed, err := license.ParseLicensePEM([]byte(lic))
 	require.NoError(t, err)
+	require.Empty(t, parsed.AnonymizationKey)
 
-	_, err = license.ParseX509(parsed.Cert)
+	parsed, err = license.ParseX509(parsed.Cert)
 	require.NoError(t, err)
+	require.Empty(t, parsed.AnonymizationKey)
+}
+
+func TestAnonymizationKey(t *testing.T) {
+	pack := makePack(t)
+
+	lic, err := NewLicense(NewLicenseInfo{
+		ValidFor:               time.Hour,
+		TLSKeyPair:             pack.ca,
+		PrivateKey:             pack.privateKey,
+		Payload:                []byte("payload"),
+		CreateAnonymizationKey: true,
+	})
+	require.NoError(t, err)
+
+	pemParsed, err := license.ParseLicensePEM([]byte(lic))
+	require.NoError(t, err)
+	require.NotEmpty(t, pemParsed.AnonymizationKey)
+
+	x509Parsed, err := license.ParseX509(pemParsed.Cert)
+	require.NoError(t, err)
+	require.NotEmpty(t, x509Parsed.AnonymizationKey)
+	require.Equal(t, pemParsed.AnonymizationKey, x509Parsed.AnonymizationKey)
 }
 
 func TestSplitPEM(t *testing.T) {

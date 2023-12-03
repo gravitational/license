@@ -17,25 +17,40 @@ limitations under the License.
 package generate
 
 import (
+	"crypto/rand"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
-
-	"github.com/gravitational/license/authority"
-	"github.com/gravitational/license/constants"
 
 	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/cloudflare/cfssl/signer"
 	"github.com/gravitational/trace"
+
+	"github.com/gravitational/license/authority"
+	"github.com/gravitational/license/constants"
 )
 
 func newCertificate(data NewLicenseInfo) ([]byte, error) {
-	// make an extension to encode into certificate
-	extensions := []signer.Extension{{
-		ID:    config.OID(constants.LicenseASN1ExtensionID),
-		Value: hex.EncodeToString(data.Payload),
-	}}
+	// make extensions to encode into the certificate
+	extensions := []signer.Extension{
+		{
+			ID:    config.OID(constants.LicenseASN1ExtensionID),
+			Value: hex.EncodeToString(data.Payload),
+		},
+	}
+	if data.CreateAnonymizationKey {
+		anonKey := make([]byte, 16)
+		_, err := rand.Read(anonKey)
+		if err != nil {
+			return nil, trace.Wrap(err, "Error creating anonymization key")
+		}
+
+		extensions = append(extensions, signer.Extension{
+			ID:    config.OID(constants.AnonymizationKeyASN1ExtensionID),
+			Value: hex.EncodeToString(anonKey),
+		})
+	}
 
 	req := csr.CertificateRequest{
 		CN:    constants.LicenseKeyPair,

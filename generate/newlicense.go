@@ -37,6 +37,9 @@ type NewLicenseInfo struct {
 	TLSKeyPair authority.TLSKeyPair
 	// Payload is the license payload
 	Payload []byte
+	// CreateAnonymizationKey specifies whether a key should be created
+	// for this license to anonymize usage data
+	CreateAnonymizationKey bool
 }
 
 // Check checks the new license request

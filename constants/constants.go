@@ -47,9 +47,12 @@ const (
 	LicenseTimeFormat = "2006-01-02 15:04:05"
 )
 
-// LicenseASNExtensionID is an extension ID used when encoding/decoding
-// license payload into certificates
-var LicenseASN1ExtensionID = asn1.ObjectIdentifier{2, 5, 42}
+var (
+	// LicenseASNExtensionID is an extension ID used when encoding/decoding
+	// license payload into certificates
+	LicenseASN1ExtensionID          = asn1.ObjectIdentifier{2, 5, 42}
+	AnonymizationKeyASN1ExtensionID = asn1.ObjectIdentifier{2, 5, 43} // TODO: create proper ID
+)
 
 // EC2InstanceTypes maps AWS instance types to their number of CPUs,
 // used for determining whether license allows a certain instance
