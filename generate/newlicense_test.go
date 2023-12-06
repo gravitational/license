@@ -106,11 +106,6 @@ func TestAnonymizationKey(t *testing.T) {
 	pemParsed, err := license.ParseLicensePEM([]byte(lic))
 	require.NoError(t, err)
 	require.NotEmpty(t, pemParsed.AnonymizationKey)
-
-	x509Parsed, err := license.ParseX509(pemParsed.Cert)
-	require.NoError(t, err)
-	require.NotEmpty(t, x509Parsed.AnonymizationKey)
-	require.Equal(t, pemParsed.AnonymizationKey, x509Parsed.AnonymizationKey)
 }
 
 func TestSplitPEM(t *testing.T) {

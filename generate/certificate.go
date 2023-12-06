@@ -32,25 +32,11 @@ import (
 )
 
 func newCertificate(data NewLicenseInfo) ([]byte, error) {
-	// make extensions to encode into the certificate
-	extensions := []signer.Extension{
-		{
-			ID:    config.OID(constants.LicenseASN1ExtensionID),
-			Value: hex.EncodeToString(data.Payload),
-		},
-	}
-	if data.CreateAnonymizationKey {
-		anonKey := make([]byte, 16)
-		_, err := rand.Read(anonKey)
-		if err != nil {
-			return nil, trace.Wrap(err, "Error creating anonymization key")
-		}
-
-		extensions = append(extensions, signer.Extension{
-			ID:    config.OID(constants.AnonymizationKeyASN1ExtensionID),
-			Value: hex.EncodeToString(anonKey),
-		})
-	}
+	// make an extension to encode into certificate
+	extensions := []signer.Extension{{
+		ID:    config.OID(constants.LicenseASN1ExtensionID),
+		Value: hex.EncodeToString(data.Payload),
+	}}
 
 	req := csr.CertificateRequest{
 		CN:    constants.LicenseKeyPair,
@@ -72,5 +58,24 @@ func newCertificate(data NewLicenseInfo) ([]byte, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	return append(tlsKeyPair.CertPEM, tlsKeyPair.KeyPEM...), nil
+	resultPEM := append(tlsKeyPair.CertPEM, tlsKeyPair.KeyPEM...)
+
+	if data.CreateAnonymizationKey {
+		anonKey := make([]byte, 16)
+		_, err := rand.Read(anonKey)
+		if err != nil {
+			return nil, trace.Wrap(err, "Error creating anonymization key")
+		}
+
+		resultPEM = append(resultPEM, pem.EncodeToMemory(&pem.Block{
+			Type: constants.AnonymizationKeyPEMBlock,
+			Headers: map[string]string{ // Headers are just notes for curious users
+				"Purpose": "Anonymization of Teleport user activity and resource usage statistics",
+				"Caution": "Please ensure that this key is the same in all Teleport instances",
+			},
+			Bytes: anonKey,
+		})...)
+	}
+
+	return resultPEM, nil
 }

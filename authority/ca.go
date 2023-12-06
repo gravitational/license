@@ -174,11 +174,9 @@ func getSigner(certAuthority *TLSKeyPair, validFor time.Duration) (signer.Signer
 
 	profile := config.DefaultConfig()
 
-	// whitelist our custom extensions where encoded license payload
-	// and anonymization key will go
+	// whitelist our custom extension where encoded license payload will go
 	profile.ExtensionWhitelist = map[string]bool{
-		constants.LicenseASN1ExtensionID.String():          true,
-		constants.AnonymizationKeyASN1ExtensionID.String(): true,
+		constants.LicenseASN1ExtensionID.String(): true,
 	}
 
 	// the default profile has 1 year expiration time, override it if it was provided

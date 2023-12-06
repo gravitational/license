@@ -19,7 +19,6 @@ package license
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/pem"
 
 	"github.com/gravitational/license/constants"
@@ -33,7 +32,7 @@ func ParseLicensePEM(pem []byte) (*License, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	certificateBytes, _, err := parseCertificatePEM(string(pem))
+	certificateBytes, _, anonKey, err := parseCertificatePEM(string(pem))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -41,7 +40,7 @@ func ParseLicensePEM(pem []byte) (*License, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	rawPayload, anonKey, err := parseExtensionsFromX509(certificate)
+	rawPayload, err := getRawPayloadFromX509(certificate)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -59,15 +58,14 @@ func ParseLicensePEM(pem []byte) (*License, error) {
 
 // ParseX509 parses the license from the provided x509 certificate
 func ParseX509(cert *x509.Certificate) (*License, error) {
-	rawPayload, anonKey, err := parseExtensionsFromX509(cert)
+	rawPayload, err := getRawPayloadFromX509(cert)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	license := License{
-		Cert:             cert,
-		RawPayload:       rawPayload,
-		AnonymizationKey: anonKey,
+		Cert:       cert,
+		RawPayload: rawPayload,
 	}
 
 	return &license, nil
@@ -94,34 +92,23 @@ func MakeTLSConfig(license License) (*tls.Config, error) {
 	}, nil
 }
 
-// getRawPayloadFromX509 returns the payload and the anonymization key
-// from extensions of the provided x509 certificate.
-func parseExtensionsFromX509(cert *x509.Certificate) ([]byte, string, error) {
-	var (
-		payload []byte
-		anonKey string
-	)
-
+// getRawPayloadFromX509 returns the payload in the extension of the
+// provided x509 certificate
+func getRawPayloadFromX509(cert *x509.Certificate) ([]byte, error) {
 	for _, ext := range cert.Extensions {
 		if ext.Id.Equal(constants.LicenseASN1ExtensionID) {
-			payload = ext.Value
-		} else if ext.Id.Equal(constants.AnonymizationKeyASN1ExtensionID) {
-			anonKey = hex.EncodeToString(ext.Value)
+			return ext.Value, nil
 		}
 	}
 
-	if len(payload) == 0 {
-		return nil, "", trace.NotFound(
-			"certificate does not contain extension with license payload")
-	}
-
-	return payload, anonKey, nil
+	return nil, trace.NotFound(
+		"certificate does not contain extension with license payload")
 }
 
 // parseCertificatePEM parses the concatenated certificate/private key in PEM format
 // and returns certificate and private key in decoded DER ASN.1 structure
-func parseCertificatePEM(certPEM string) ([]byte, []byte, error) {
-	var certificateBytes, privateBytes []byte
+func parseCertificatePEM(certPEM string) ([]byte, []byte, []byte, error) {
+	var certificateBytes, privateBytes, anonKey []byte
 	block, rest := pem.Decode([]byte(certPEM))
 	for block != nil {
 		switch block.Type {
@@ -129,14 +116,16 @@ func parseCertificatePEM(certPEM string) ([]byte, []byte, error) {
 			certificateBytes = block.Bytes
 		case constants.RSAPrivateKeyPEMBlock:
 			privateBytes = block.Bytes
+		case constants.AnonymizationKeyPEMBlock:
+			anonKey = block.Bytes
 		}
 		// parse the next block
 		block, rest = pem.Decode(rest)
 	}
 	if len(certificateBytes) == 0 || len(privateBytes) == 0 {
-		return nil, nil, trace.BadParameter("could not parse the license")
+		return nil, nil, nil, trace.BadParameter("could not parse the license")
 	}
-	return certificateBytes, privateBytes, nil
+	return certificateBytes, privateBytes, anonKey, nil
 }
 
 // SplitPEM splits the provided PEM data that contains concatenated cert and key

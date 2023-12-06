@@ -33,9 +33,8 @@ type License struct {
 	// KeyPEM is the private key part of the license in PEM Format,
 	// may be empty if the license was parsed from certificate only
 	KeyPEM []byte
-	// AnonymizationKey is a key used to anonymize usage data, may be
-	// empty
-	AnonymizationKey string
+	// AnonymizationKey is a key used to anonymize usage data, may be empty
+	AnonymizationKey []byte
 }
 
 // Verify makes sure the license is valid

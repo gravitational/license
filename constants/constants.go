@@ -31,6 +31,9 @@ const (
 	// CertificatePEMBlock is the name of the PEM block where certificate is stored
 	CertificatePEMBlock = "CERTIFICATE"
 
+	// AnonymizationKeyPEMBlock is the name of the PEM block where anonymization key is stored
+	AnonymizationKeyPEMBlock = "ANONYMIZATION KEY"
+
 	// LicenseKeyPair is a name of the license key pair
 	LicenseKeyPair = "license"
 
@@ -47,12 +50,9 @@ const (
 	LicenseTimeFormat = "2006-01-02 15:04:05"
 )
 
-var (
-	// LicenseASNExtensionID is an extension ID used when encoding/decoding
-	// license payload into certificates
-	LicenseASN1ExtensionID          = asn1.ObjectIdentifier{2, 5, 42}
-	AnonymizationKeyASN1ExtensionID = asn1.ObjectIdentifier{2, 5, 43} // TODO: create proper ID
-)
+// LicenseASNExtensionID is an extension ID used when encoding/decoding
+// license payload into certificates
+var LicenseASN1ExtensionID = asn1.ObjectIdentifier{2, 5, 42}
 
 // EC2InstanceTypes maps AWS instance types to their number of CPUs,
 // used for determining whether license allows a certain instance
