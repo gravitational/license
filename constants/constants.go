@@ -32,7 +32,7 @@ const (
 	CertificatePEMBlock = "CERTIFICATE"
 
 	// AnonymizationKeyPEMBlock is the name of the PEM block where anonymization key is stored
-	AnonymizationKeyPEMBlock = "ANONYMIZATION KEY"
+	AnonymizationKeyPEMBlock = "TELEPORT ANONYMIZATION KEY"
 
 	// LicenseKeyPair is a name of the license key pair
 	LicenseKeyPair = "license"
