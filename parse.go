@@ -107,8 +107,7 @@ func getRawPayloadFromX509(cert *x509.Certificate) ([]byte, error) {
 
 // parseCertificatePEM parses the concatenated certificate/private key in PEM format
 // and returns certificate and private key in decoded DER ASN.1 structure
-func parseCertificatePEM(certPEM string) ([]byte, []byte, []byte, error) {
-	var certificateBytes, privateBytes, anonKey []byte
+func parseCertificatePEM(certPEM string) (certificateBytes, privateBytes, anonKey []byte, err error) {
 	block, rest := pem.Decode([]byte(certPEM))
 	for block != nil {
 		switch block.Type {

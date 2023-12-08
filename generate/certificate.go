@@ -17,7 +17,6 @@ limitations under the License.
 package generate
 
 import (
-	"crypto/rand"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
@@ -59,23 +58,6 @@ func newCertificate(data NewLicenseInfo) ([]byte, error) {
 	}
 
 	resultPEM := append(tlsKeyPair.CertPEM, tlsKeyPair.KeyPEM...)
-
-	if data.CreateAnonymizationKey {
-		anonKey := make([]byte, 16)
-		_, err := rand.Read(anonKey)
-		if err != nil {
-			return nil, trace.Wrap(err, "Error creating anonymization key")
-		}
-
-		resultPEM = append(resultPEM, pem.EncodeToMemory(&pem.Block{
-			Type: constants.AnonymizationKeyPEMBlock,
-			Headers: map[string]string{ // Headers are just notes for curious users
-				"Purpose": "Anonymization of Teleport user activity and resource usage statistics",
-				"Caution": "Please ensure that this key is the same in all Teleport instances",
-			},
-			Bytes: anonKey,
-		})...)
-	}
 
 	return resultPEM, nil
 }

@@ -19,6 +19,7 @@ package generate
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/pem"
 	"time"
 
 	"github.com/gravitational/license/authority"
@@ -37,9 +38,6 @@ type NewLicenseInfo struct {
 	TLSKeyPair authority.TLSKeyPair
 	// Payload is the license payload
 	Payload []byte
-	// CreateAnonymizationKey specifies whether a key should be created
-	// for this license to anonymize usage data
-	CreateAnonymizationKey bool
 }
 
 // Check checks the new license request
@@ -77,4 +75,46 @@ func NewPrivateKey() (*rsa.PrivateKey, error) {
 	}
 
 	return privateKey, nil
+}
+
+// AppendAnonymizationKey generates and appends new anonymization key to the existing certificate keypair in PEM format.
+func AppendAnonymizationKey(certPEM []byte) (resultPem []byte, err error) {
+	anonKey := make([]byte, 0, 16)
+	blocks := make([]*pem.Block, 0, 2) // cert, private key are expected
+	block, rest := pem.Decode(certPEM)
+	for block != nil {
+		switch block.Type {
+		case constants.AnonymizationKeyPEMBlock:
+			anonKey = block.Bytes
+		default:
+			blocks = append(blocks, block)
+		}
+		// parse the next block
+		block, rest = pem.Decode(rest)
+	}
+
+	if len(anonKey) == 0 {
+		anonKey = make([]byte, 16)
+		_, err := rand.Read(anonKey)
+		if err != nil {
+			return nil, trace.Wrap(err, "Error creating anonymization key")
+		}
+	}
+
+	blocks = append(blocks, []*pem.Block{{
+		Type: constants.AnonymizationKeyPEMBlock,
+		Headers: map[string]string{ // Headers are just notes for curious users
+			"Purpose": "Anonymization of Teleport user activity and resource usage statistics",
+			"Caution": "Please ensure that this key is the same in all Teleport instances",
+		},
+		Bytes: anonKey,
+	}}...)
+
+	resultPem = make([]byte, 0)
+
+	for _, block := range blocks {
+		resultPem = append(resultPem, pem.EncodeToMemory(block)...)
+	}
+
+	return resultPem, nil
 }
