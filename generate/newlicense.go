@@ -77,11 +77,12 @@ func NewPrivateKey() (*rsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
-// AppendAnonymizationKey generates and appends new anonymization key to the existing certificate keypair in PEM format.
+// AppendAnonymizationKey generates and appends new anonymization key (if one does not already exist)
+// to the existing certificate keypair in PEM format.
 func AppendAnonymizationKey(licenseContents []byte) ([]byte, error) {
 	var anonKey []byte
-	blocks := make([]*pem.Block, 0, 3) // cert, private key are expected
-	block, rest := pem.Decode(certPEM)
+	blocks := make([]*pem.Block, 0, 3) // cert, private key are expected, anonymization key will be appended
+	block, rest := pem.Decode(licenseContents)
 	for block != nil {
 		switch block.Type {
 		case constants.AnonymizationKeyPEMBlock:
@@ -112,8 +113,8 @@ func AppendAnonymizationKey(licenseContents []byte) ([]byte, error) {
 
 	var result []byte
 	for _, block := range blocks {
-		resultPem = append(resultPem, pem.EncodeToMemory(block)...)
+		result = append(result, pem.EncodeToMemory(block)...)
 	}
 
-	return resultPem, nil
+	return result, nil
 }

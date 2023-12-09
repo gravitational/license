@@ -21,13 +21,13 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 
+	"github.com/gravitational/license/authority"
+	"github.com/gravitational/license/constants"
+
 	"github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/cloudflare/cfssl/signer"
 	"github.com/gravitational/trace"
-
-	"github.com/gravitational/license/authority"
-	"github.com/gravitational/license/constants"
 )
 
 func newCertificate(data NewLicenseInfo) ([]byte, error) {
@@ -57,7 +57,5 @@ func newCertificate(data NewLicenseInfo) ([]byte, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	resultPEM := append(tlsKeyPair.CertPEM, tlsKeyPair.KeyPEM...)
-
-	return resultPEM, nil
+	return append(tlsKeyPair.CertPEM, tlsKeyPair.KeyPEM...), nil
 }
