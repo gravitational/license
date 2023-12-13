@@ -110,6 +110,11 @@ func TestAppendAnonymizationKey(t *testing.T) {
 	parsed, err := license.ParseLicensePEM(licAppended)
 	require.NoError(t, err)
 	require.NotEmpty(t, parsed.AnonymizationKey)
+
+	// Test that appending the anonymization key again does not change the license
+	licAppendedAgain, err := AppendAnonymizationKey(licAppended)
+	require.NoError(t, err)
+	require.Equal(t, string(licAppended), string(licAppendedAgain))
 }
 
 func TestSplitPEM(t *testing.T) {
