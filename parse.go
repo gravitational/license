@@ -32,7 +32,7 @@ func ParseLicensePEM(pem []byte) (*License, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	certificateBytes, _, err := parseCertificatePEM(string(pem))
+	certificateBytes, _, anonKey, err := parseCertificatePEM(string(pem))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -46,14 +46,14 @@ func ParseLicensePEM(pem []byte) (*License, error) {
 	}
 
 	license := License{
-		Cert:       certificate,
-		CertPEM:    certPEM,
-		KeyPEM:     keyPEM,
-		RawPayload: rawPayload,
+		Cert:             certificate,
+		CertPEM:          certPEM,
+		KeyPEM:           keyPEM,
+		RawPayload:       rawPayload,
+		AnonymizationKey: anonKey,
 	}
 
 	return &license, nil
-
 }
 
 // ParseX509 parses the license from the provided x509 certificate
@@ -100,14 +100,14 @@ func getRawPayloadFromX509(cert *x509.Certificate) ([]byte, error) {
 			return ext.Value, nil
 		}
 	}
+
 	return nil, trace.NotFound(
 		"certificate does not contain extension with license payload")
 }
 
 // parseCertificatePEM parses the concatenated certificate/private key in PEM format
 // and returns certificate and private key in decoded DER ASN.1 structure
-func parseCertificatePEM(certPEM string) ([]byte, []byte, error) {
-	var certificateBytes, privateBytes []byte
+func parseCertificatePEM(certPEM string) (certificateBytes, privateBytes, anonKey []byte, err error) {
 	block, rest := pem.Decode([]byte(certPEM))
 	for block != nil {
 		switch block.Type {
@@ -115,14 +115,16 @@ func parseCertificatePEM(certPEM string) ([]byte, []byte, error) {
 			certificateBytes = block.Bytes
 		case constants.RSAPrivateKeyPEMBlock:
 			privateBytes = block.Bytes
+		case constants.AnonymizationKeyPEMBlock:
+			anonKey = block.Bytes
 		}
 		// parse the next block
 		block, rest = pem.Decode(rest)
 	}
 	if len(certificateBytes) == 0 || len(privateBytes) == 0 {
-		return nil, nil, trace.BadParameter("could not parse the license")
+		return nil, nil, nil, trace.BadParameter("could not parse the license")
 	}
-	return certificateBytes, privateBytes, nil
+	return certificateBytes, privateBytes, anonKey, nil
 }
 
 // SplitPEM splits the provided PEM data that contains concatenated cert and key

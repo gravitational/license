@@ -78,14 +78,43 @@ func TestParseX509(t *testing.T) {
 		ValidFor:   time.Hour,
 		TLSKeyPair: pack.ca,
 		PrivateKey: pack.privateKey,
+		Payload:    []byte("payload"),
 	})
 	require.NoError(t, err)
 
 	parsed, err := license.ParseLicensePEM([]byte(lic))
 	require.NoError(t, err)
+	require.Empty(t, parsed.AnonymizationKey)
 
-	_, err = license.ParseX509(parsed.Cert)
+	parsed, err = license.ParseX509(parsed.Cert)
 	require.NoError(t, err)
+	require.Empty(t, parsed.AnonymizationKey)
+}
+
+func TestAppendAnonymizationKey(t *testing.T) {
+	pack := makePack(t)
+
+	lic, err := NewLicense(NewLicenseInfo{
+		ValidFor:   time.Hour,
+		TLSKeyPair: pack.ca,
+		PrivateKey: pack.privateKey,
+		Payload:    []byte("payload"),
+	})
+	require.NoError(t, err)
+	require.NotContains(t, lic, constants.AnonymizationKeyPEMBlock)
+
+	licAppended, err := AppendAnonymizationKey([]byte(lic))
+	require.NoError(t, err)
+	require.Contains(t, string(licAppended), constants.AnonymizationKeyPEMBlock)
+
+	parsed, err := license.ParseLicensePEM(licAppended)
+	require.NoError(t, err)
+	require.NotEmpty(t, parsed.AnonymizationKey)
+
+	// Test that appending the anonymization key again does not change the license
+	licAppendedAgain, err := AppendAnonymizationKey(licAppended)
+	require.NoError(t, err)
+	require.Equal(t, string(licAppended), string(licAppendedAgain))
 }
 
 func TestSplitPEM(t *testing.T) {
