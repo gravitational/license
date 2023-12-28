@@ -21,7 +21,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
-	"io/ioutil"
+	"os"
 	"time"
 
 	"github.com/gravitational/license/constants"
@@ -46,11 +46,11 @@ type TLSKeyPair struct {
 // NewTLSKeyPair returns a new TLSKeyPair with private key and certificate found
 // at the provided paths
 func NewTLSKeyPair(keyPath, certPath string) (*TLSKeyPair, error) {
-	keyBytes, err := ioutil.ReadFile(keyPath)
+	keyBytes, err := os.ReadFile(keyPath)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	certBytes, err := ioutil.ReadFile(certPath)
+	certBytes, err := os.ReadFile(certPath)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -63,7 +63,7 @@ func NewTLSKeyPair(keyPath, certPath string) (*TLSKeyPair, error) {
 // GenerateSelfSignedCA generates self signed certificate authority
 func GenerateSelfSignedCA(req csr.CertificateRequest) (*TLSKeyPair, error) {
 	if req.KeyRequest == nil {
-		req.KeyRequest = &csr.BasicKeyRequest{
+		req.KeyRequest = &csr.KeyRequest{
 			A: constants.TLSKeyAlgo,
 			S: constants.TLSKeySize,
 		}
@@ -145,18 +145,22 @@ func GenerateCSR(req csr.CertificateRequest, privateKeyPEM []byte) (csrBytes []b
 		if err != nil {
 			return nil, nil, trace.Wrap(err)
 		}
-		req.KeyRequest = existingKey
+		key = privateKeyPEM
+		csrBytes, err = csr.Generate(existingKey.key, &req)
+		if err != nil {
+			return nil, nil, trace.Wrap(err)
+		}
 	} else {
-		req.KeyRequest = &csr.BasicKeyRequest{
+		req.KeyRequest = &csr.KeyRequest{
 			A: constants.TLSKeyAlgo,
 			S: constants.TLSKeySize,
 		}
+		csrBytes, key, err = generator.ProcessRequest(&req)
+		if err != nil {
+			return nil, nil, trace.Wrap(err)
+		}
 	}
 
-	csrBytes, key, err = generator.ProcessRequest(&req)
-	if err != nil {
-		return nil, nil, trace.Wrap(err)
-	}
 	return csrBytes, key, nil
 }
 
