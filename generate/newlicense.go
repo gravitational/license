@@ -17,9 +17,14 @@ limitations under the License.
 package generate
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
+	"math/big"
+	"net"
 	"time"
 
 	"github.com/gravitational/license/authority"
@@ -27,6 +32,68 @@ import (
 
 	"github.com/gravitational/trace"
 )
+
+func newCertificate(licenseParams NewLicenseInfo) ([]byte, error) {
+	ca, err := licenseParams.CACertificate()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	signingKey, err := licenseParams.SigningKey()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	loopbackIP := net.ParseIP(constants.LoopbackIP)
+	if loopbackIP == nil {
+		return nil, trace.BadParameter("loopback IP is invalid (this is a bug)")
+	}
+
+	// Note: starting with Go 1.24, the serial number is generated automatically.
+	// Keep this here for now until dependent repos are all on Go 1.24.
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, trace.Wrap(err, "generating serial number")
+	}
+
+	template := x509.Certificate{
+		Subject: pkix.Name{
+			CommonName:   constants.LicenseKeyPair,
+			Organization: []string{constants.LicenseOrg},
+		},
+		SerialNumber:          serialNumber,
+		NotBefore:             time.Now().Add(-5 * time.Minute),
+		NotAfter:              time.Now().Add(licenseParams.ValidFor),
+		IPAddresses:           []net.IP{loopbackIP},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		SignatureAlgorithm:    x509.SHA256WithRSA,
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+		ExtraExtensions: []pkix.Extension{
+			{
+				Id:    constants.LicenseASN1ExtensionID,
+				Value: licenseParams.Payload,
+			},
+		},
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, ca, &licenseParams.PrivateKey.PublicKey, signingKey)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	var buf bytes.Buffer
+	if err := pem.Encode(&buf, &pem.Block{Type: constants.CertificatePEMBlock, Bytes: derBytes}); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if err := pem.Encode(&buf, &pem.Block{Type: constants.RSAPrivateKeyPEMBlock, Bytes: x509.MarshalPKCS1PrivateKey(licenseParams.PrivateKey)}); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return buf.Bytes(), nil
+}
 
 // NewLicenseInfo encapsulates fields needed to generate a license
 type NewLicenseInfo struct {
@@ -53,6 +120,34 @@ func (i *NewLicenseInfo) Check() error {
 	}
 
 	return nil
+}
+
+func (i *NewLicenseInfo) CACertificate() (*x509.Certificate, error) {
+	block, _ := pem.Decode(i.TLSKeyPair.CertPEM)
+	if block == nil {
+		return nil, trace.BadParameter("missing or invalid CA certificate PEM")
+	}
+
+	if block.Type != constants.CertificatePEMBlock {
+		return nil, trace.BadParameter("invalid PEM block: %v", block.Type)
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	return cert, trace.Wrap(err)
+}
+
+func (i *NewLicenseInfo) SigningKey() (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode(i.TLSKeyPair.KeyPEM)
+	if block == nil {
+		return nil, trace.BadParameter("missing or invalid CA private key PEM")
+	}
+
+	if block.Type != constants.RSAPrivateKeyPEMBlock {
+		return nil, trace.BadParameter("invalid PEM block: %v", block.Type)
+	}
+
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	return privateKey, trace.Wrap(err)
 }
 
 // NewLicense generates a new license according to the provided request
