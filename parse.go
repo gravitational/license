@@ -28,7 +28,7 @@ import (
 
 // ParseLicensePEM parses license PEM, parses payload on demand
 func ParseLicensePEM(pem []byte) (*License, error) {
-	certPEM, keyPEM, err := SplitPEM([]byte(pem))
+	certPEM, keyPEM, err := splitPEM([]byte(pem))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -127,10 +127,10 @@ func parseCertificatePEM(certPEM string) (certificateBytes, privateBytes, anonKe
 	return certificateBytes, privateBytes, anonKey, nil
 }
 
-// SplitPEM splits the provided PEM data that contains concatenated cert and key
+// splitPEM splits the provided PEM data that contains concatenated cert and key
 // (in any order) into cert PEM and key PEM respectively. Returns an error if
 // any of them is missing
-func SplitPEM(pemData []byte) (certPEM []byte, keyPEM []byte, err error) {
+func splitPEM(pemData []byte) (certPEM []byte, keyPEM []byte, err error) {
 	block, rest := pem.Decode(pemData)
 	for block != nil {
 		switch block.Type {
