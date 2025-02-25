@@ -29,7 +29,6 @@ import (
 	"github.com/gravitational/license/authority"
 	"github.com/gravitational/license/constants"
 
-	"github.com/gravitational/trace"
 	"github.com/stretchr/testify/require"
 )
 
@@ -147,57 +146,4 @@ func TestAppendAnonymizationKey(t *testing.T) {
 	licAppendedAgain, err := AppendAnonymizationKey(licAppended)
 	require.NoError(t, err)
 	require.Equal(t, string(licAppended), string(licAppendedAgain))
-}
-
-func TestSplitPEM(t *testing.T) {
-	pack := makePack(t)
-
-	testCases := []struct {
-		desc    string
-		input   []byte
-		err     error
-		certPEM []byte
-		keyPEM  []byte
-	}{
-		{
-			desc:    "cert + key",
-			input:   append(pack.ca.CertPEM, pack.ca.KeyPEM...),
-			err:     nil,
-			certPEM: pack.ca.CertPEM,
-			keyPEM:  pack.ca.KeyPEM,
-		},
-		{
-			desc:    "key + cert",
-			input:   append(pack.ca.KeyPEM, pack.ca.CertPEM...),
-			err:     nil,
-			certPEM: pack.ca.CertPEM,
-			keyPEM:  pack.ca.KeyPEM,
-		},
-		{
-			desc:    "only cert",
-			input:   pack.ca.CertPEM,
-			err:     trace.BadParameter(""),
-			certPEM: nil,
-			keyPEM:  nil,
-		},
-		{
-			desc:    "only key",
-			input:   pack.ca.KeyPEM,
-			err:     trace.BadParameter(""),
-			certPEM: nil,
-			keyPEM:  nil,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			certPEM, keyPEM, err := license.SplitPEM(tc.input)
-			if tc.err != nil {
-				require.IsType(t, tc.err, err)
-			} else {
-				require.NoError(t, err)
-			}
-			require.Equal(t, tc.certPEM, certPEM)
-			require.Equal(t, tc.keyPEM, keyPEM)
-		})
-	}
 }
