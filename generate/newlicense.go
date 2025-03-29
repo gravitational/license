@@ -29,6 +29,7 @@ import (
 
 	"github.com/gravitational/license/authority"
 	"github.com/gravitational/license/constants"
+	"github.com/gravitational/license/generate/internal/parse"
 
 	"github.com/gravitational/trace"
 )
@@ -137,16 +138,7 @@ func (i *NewLicenseInfo) CACertificate() (*x509.Certificate, error) {
 }
 
 func (i *NewLicenseInfo) SigningKey() (*rsa.PrivateKey, error) {
-	block, _ := pem.Decode(i.TLSKeyPair.KeyPEM)
-	if block == nil {
-		return nil, trace.BadParameter("missing or invalid CA private key PEM")
-	}
-
-	if block.Type != constants.RSAPrivateKeyPEMBlock {
-		return nil, trace.BadParameter("invalid PEM block: %v", block.Type)
-	}
-
-	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	privateKey, err := parse.RSAPrivateKey(i.TLSKeyPair.KeyPEM)
 	return privateKey, trace.Wrap(err)
 }
 
